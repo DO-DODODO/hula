@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>훌라 - 게임</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="game-body">
+
+  <!-- Game Table -->
+  <div id="game-table">
+
+    <!-- Top player -->
+    <div class="player-area top" id="player-top">
+      <div class="player-info">
+        <span class="player-name"></span>
+        <span class="player-balance"></span>
+        <span class="player-registered"></span>
+      </div>
+      <div class="player-cards"></div>
+    </div>
+
+    <!-- Left player -->
+    <div class="player-area left" id="player-left">
+      <div class="player-info">
+        <span class="player-name"></span>
+        <span class="player-balance"></span>
+        <span class="player-registered"></span>
+      </div>
+      <div class="player-cards"></div>
+    </div>
+
+    <!-- Right player -->
+    <div class="player-area right" id="player-right">
+      <div class="player-info">
+        <span class="player-name"></span>
+        <span class="player-balance"></span>
+        <span class="player-registered"></span>
+      </div>
+      <div class="player-cards"></div>
+    </div>
+
+    <!-- Center area -->
+    <div id="center-area">
+      <!-- Registered combos -->
+      <div id="combos-area"></div>
+
+      <!-- Deck and discard -->
+      <div id="piles-area">
+        <div id="deck-pile" class="pile">
+          <div class="card card-back" id="deck-card">
+            <span id="deck-count"></span>
+          </div>
+          <div class="pile-label">덱</div>
+        </div>
+        <div id="discard-pile" class="pile">
+          <div class="card" id="discard-card"></div>
+          <div class="pile-label">버린 더미</div>
+        </div>
+        <button id="btn-thankyou" class="btn-thankyou" disabled>땡큐!</button>
+      </div>
+    </div>
+
+    <!-- Bottom: my area -->
+    <div id="my-area">
+      <div id="my-info">
+        <div class="my-character" id="my-character">
+          <span id="my-name"></span>
+          <span id="my-balance"></span>
+          <span id="my-registered"></span>
+        </div>
+      </div>
+      <div id="timer-area">
+        <svg id="timer-svg" viewBox="0 0 60 60">
+          <circle class="timer-bg" cx="30" cy="30" r="26"/>
+          <circle class="timer-bar" id="timer-circle" cx="30" cy="30" r="26"
+            stroke-dasharray="163.4" stroke-dashoffset="0"/>
+          <text class="timer-text" id="timer-text" x="30" y="35">60</text>
+        </svg>
+      </div>
+      <div id="my-hand-area">
+        <div id="my-hand"></div>
+        <div id="action-buttons">
+          <button id="btn-register" class="btn-action" disabled>등록</button>
+          <button id="btn-attach" class="btn-action" disabled>붙이기</button>
+          <button id="btn-discard" class="btn-action" disabled>버리기</button>
+          <button id="btn-cancel-thankyou" class="btn-action danger" style="display:none">취소</button>
+        </div>
+        <div id="sort-buttons">
+          <button id="btn-sort-num" class="btn-sort">숫자순</button>
+          <button id="btn-sort-suit" class="btn-sort">모양순</button>
+          <button id="btn-sort-off" class="btn-sort">원래대로</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game log -->
+    <div id="game-log"></div>
+
+    <!-- Admin controls -->
+    <div id="admin-controls" style="display:none">
+      <button id="btn-admin-stop" class="btn-danger">게임 중단</button>
+    </div>
+  </div>
+
+  <!-- Attach target selector modal -->
+  <div id="modal-attach" class="modal" style="display:none">
+    <div class="modal-box">
+      <h3>붙일 조합 선택</h3>
+      <div id="attach-combo-list"></div>
+      <button id="btn-attach-cancel" class="btn-secondary">취소</button>
+    </div>
+  </div>
+
+  <!-- Thank you cancel modal -->
+  <div id="modal-thankyou-lock" class="modal" style="display:none">
+    <div class="modal-box">
+      <h3>땡큐!</h3>
+      <p id="thankyou-card-name"></p>
+      <button id="btn-thankyou-cancel" class="btn-danger">취소 (벌금 부과)</button>
+    </div>
+  </div>
+
+  <!-- Floating notifications -->
+  <div id="notifications"></div>
+
+  <!-- Game End overlay -->
+  <div id="overlay-gameend" style="display:none">
+    <div id="confetti-container"></div>
+    <div id="gameend-box">
+      <div id="win-announcement"></div>
+      <div id="win-message"></div>
+      <button id="btn-gameend-ok" class="btn-primary">확인</button>
+    </div>
+  </div>
+
+  <!-- Results overlay -->
+  <div id="overlay-results" style="display:none">
+    <div id="results-box">
+      <h2>정산 결과</h2>
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th>순위</th><th>이름</th><th>카드점수</th><th>이번 게임</th><th>보유</th><th>총 승리</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button id="btn-results-again" class="btn-primary">한 판 더!</button>
+        <button id="btn-results-home" class="btn-secondary">메인으로</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

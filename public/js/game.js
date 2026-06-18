@@ -1,0 +1,587 @@
+const socket = io();
+const userCode = sessionStorage.getItem('userCode');
+const userName = sessionStorage.getItem('userName');
+const gameMode = sessionStorage.getItem('gameMode');
+const isAdmin = sessionStorage.getItem('isAdmin') === '1';
+
+if (!userCode) location.href = '/';
+
+let gameState = null;
+let selectedCards = new Set();
+let timerInterval = null;
+let timerSeconds = 60;
+let thankYouLocked = false;
+let attachMode = false;
+let myFixedSeat = null;
+let sortMode = null;
+let lastTurnPlayerCode = null; // 타이머 리셋 기준
+
+// ── Init ───────────────────────────────────────────────────────────────
+socket.emit('login', { userCode });
+socket.on('loginSuccess', () => {
+  if (gameMode === 'single') {
+    socket.emit('startSingle');
+  }
+  // Multi: server sends gameState automatically
+});
+
+if (isAdmin) {
+  document.getElementById('admin-controls').style.display = '';
+  document.getElementById('btn-admin-stop').onclick = () => {
+    if (confirm('게임을 중단하시겠습니까?')) socket.emit('adminStopGame');
+  };
+}
+
+// ── Game State ─────────────────────────────────────────────────────────
+socket.on('gameState', (state) => {
+  // 새 게임 시작 시 결과 화면 숨기기
+  if (gameState && state.id !== gameState.id) {
+    document.getElementById('overlay-gameend').style.display = 'none';
+    document.getElementById('overlay-results').style.display = 'none';
+    selectedCards.clear();
+    myFixedSeat = null;
+    lastTurnPlayerCode = null;
+  }
+  gameState = state;
+  if (myFixedSeat === null) {
+    const me = state.players.find(p => p.userCode === userCode);
+    if (me !== undefined) myFixedSeat = me.seatIndex;
+  }
+  // 타이머는 턴이 바뀔 때만 리셋
+  const turnChanged = state.currentPlayerCode !== lastTurnPlayerCode;
+  if (turnChanged) {
+    lastTurnPlayerCode = state.currentPlayerCode;
+    updateTimer();
+  }
+  render();
+});
+
+socket.on('gameStopped', () => {
+  showNotif('게임이 중단되었습니다', 'info');
+  setTimeout(() => location.href = '/', 2000);
+});
+
+socket.on('canStop', () => {
+  showNotif('상대방이 모두 나갔습니다. 게임을 중단할 수 있습니다.', 'info');
+});
+
+socket.on('actionError', (msg) => showNotif(msg, 'info'));
+
+// ── Render ─────────────────────────────────────────────────────────────
+function render() {
+  if (!gameState) return;
+  const me = gameState.players.find(p => p.userCode === userCode);
+  const others = getOtherSeats(myFixedSeat ?? me?.seatIndex);
+
+  renderPlayer('top', others[0]);
+  renderPlayer('left', others[1]);
+  renderPlayer('right', others[2]);
+  renderMyArea(me);
+  renderCenter();
+  updateActionButtons(me);
+}
+
+function getOtherSeats(mySeat) {
+  if (mySeat === undefined || mySeat === null) return [null, null, null];
+  const n = gameState.players.length;
+  const positions = [];
+  for (let i = 1; i <= 3; i++) {
+    const idx = (mySeat + i) % n;
+    positions.push(gameState.players[idx] || null);
+  }
+  // 시계방향: +1=오른쪽, +2=위, +3=왼쪽
+  return [positions[1], positions[2], positions[0]]; // top, left, right
+}
+
+function renderPlayer(pos, player) {
+  const el = document.getElementById(`player-${pos}`);
+  if (!player) { el.style.visibility = 'hidden'; return; }
+  el.style.visibility = '';
+
+  const isCurrent = gameState.currentPlayerCode === player.userCode;
+  el.classList.toggle('active', isCurrent);
+
+  el.querySelector('.player-name').textContent = player.userName + (player.isAI ? ' 🤖' : '');
+  el.querySelector('.player-registered').textContent = player.registered ? '✓등록' : '';
+
+  const cardsEl = el.querySelector('.player-cards');
+  cardsEl.innerHTML = '';
+  for (let i = 0; i < player.handCount; i++) {
+    const c = document.createElement('div');
+    c.className = 'card card-back tiny';
+    cardsEl.appendChild(c);
+  }
+}
+
+function getSortedHand(hand) {
+  if (!sortMode) return hand;
+  const sorted = [...hand];
+  const suitOrder = { S: 0, H: 1, D: 2, C: 3 };
+  if (sortMode === 'number') sorted.sort((a, b) => a.value - b.value || suitOrder[a.suit] - suitOrder[b.suit]);
+  if (sortMode === 'suit')   sorted.sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit] || a.value - b.value);
+  return sorted;
+}
+
+function renderMyArea(me) {
+  if (!me) return;
+  const isCurrent = gameState.currentPlayerCode === userCode && !gameState.thankYou?.active;
+  const phase = gameState.phase;
+
+  document.getElementById('my-name').textContent = userName;
+  document.getElementById('my-balance').textContent = gameMode === 'multi'
+    ? `₩${(me.multiBalance || 0).toLocaleString?.() || ''}` : `${me.singlePoints || 0}pt`;
+  document.getElementById('my-registered').textContent = me.registered ? '✓등록' : '';
+  document.getElementById('my-character').classList.toggle('active', isCurrent);
+
+  // 손패 카드 영역만 강조 (내 차례 + 행동 단계)
+  document.getElementById('my-hand').classList.toggle('my-turn-highlight', isCurrent && phase === 'action');
+
+  const rawHand = me.hand || [];
+  const hand = getSortedHand(rawHand);
+  const handEl = document.getElementById('my-hand');
+
+  const currentIds = [...handEl.querySelectorAll('.card[data-card-id]')]
+    .filter(el => !el.classList.contains('card-leaving'))
+    .map(el => el.dataset.cardId);
+  const newIds = hand.map(c => c.id);
+  const handChanged = currentIds.join(',') !== newIds.join(',');
+
+  if (handChanged) {
+    const addedIds = new Set(newIds.filter(id => !currentIds.includes(id)));
+    handEl.innerHTML = '';
+    for (const card of hand) {
+      const el = createCardEl(card);
+      el.onclick = () => toggleCardSelect(card.id, el);
+      if (selectedCards.has(card.id)) el.classList.add('selected');
+      if (addedIds.has(card.id)) el.classList.add('card-entering');
+      handEl.appendChild(el);
+    }
+  } else {
+    handEl.querySelectorAll('.card[data-card-id]').forEach(el => {
+      el.classList.toggle('selected', selectedCards.has(el.dataset.cardId));
+    });
+  }
+}
+
+function renderCenter() {
+  // Deck
+  const deckCount = gameState.deck?.count || 0;
+  document.getElementById('deck-count').textContent = deckCount;
+
+  // Discard pile
+  const discardEl = document.getElementById('discard-card');
+  const discardPile = gameState.discardPile;
+  if (discardPile) {
+    const prevTopId = discardEl.dataset.topId;
+    const newTopId = discardPile.top?.id;
+    // 땡큐로 카드 가져간 후: 이전 카드 회색 처리
+    const isOldCard = !!gameState.thankYouTaker;
+    discardEl.innerHTML = '';
+    discardEl.className = 'card ' + getCardColorClass(discardPile.top) + (isOldCard ? ' discard-old' : '');
+    discardEl.dataset.topId = newTopId;
+    discardEl.appendChild(cardInnerEl(discardPile.top));
+    if (prevTopId !== newTopId) {
+      discardEl.classList.add('discard-pop');
+      setTimeout(() => discardEl.classList.remove('discard-pop'), 400);
+    }
+    discardEl.onclick = () => handleDraw('discard');
+  } else {
+    discardEl.innerHTML = '';
+    discardEl.className = 'card';
+    discardEl.textContent = '없음';
+    discardEl.onclick = null;
+  }
+
+  // Deck click
+  document.getElementById('deck-card').onclick = () => handleDraw('deck');
+
+  // 내 차례 + 드로우 단계일 때 덱 강조 (땡큐 활성 중에도 덱은 가능)
+  const drawPhase = isMyTurn() && gameState.phase === 'draw';
+  document.getElementById('deck-pile').classList.toggle('my-turn-highlight', drawPhase);
+  // 버린더미는 땡큐 활성 중 차단
+  document.getElementById('discard-pile').classList.toggle('my-turn-highlight',
+    drawPhase && !!gameState.discardPile && !gameState.firstTurn && !gameState.thankYou?.active);
+
+  // Thank you button
+  const btn = document.getElementById('btn-thankyou');
+  const tyActive = gameState.thankYou?.active;
+  const tyLocked = gameState.thankYou?.lock;
+  btn.disabled = !tyActive || !!tyLocked || gameState.thankYou?.discarderCode === userCode;
+
+  // 취소 버튼: 내가 땡큐로 카드 가져온 후 내 턴 동안 표시
+  const iMyThankYouTaker = gameState.thankYouTaker === userCode && isMyTurn();
+  thankYouLocked = iMyThankYouTaker;
+  document.getElementById('btn-cancel-thankyou').style.display = iMyThankYouTaker ? '' : 'none';
+
+  // Combos
+  renderCombos();
+}
+
+function sortComboCards(cards, type) {
+  const suitOrder = { S: 0, H: 1, D: 2, C: 3 };
+  if (type === 'set') {
+    return [...cards].sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit]);
+  }
+  if (type === 'sequence') {
+    const sorted = [...cards].sort((a, b) => a.value - b.value);
+    const n = sorted.length;
+    // 숫자 간 가장 큰 순환 갭 찾기 → 갭 다음 카드가 시작점
+    // 예) K-A-2: [1,2,13] → 2와13 갭(11)이 최대 → 13(K)부터 → [K,A,2]
+    let maxGap = 0, startIdx = 0;
+    for (let i = 0; i < n; i++) {
+      const curr = sorted[i].value;
+      const next = sorted[(i + 1) % n].value;
+      const gap = next > curr ? next - curr : next + 13 - curr;
+      if (gap > maxGap) { maxGap = gap; startIdx = (i + 1) % n; }
+    }
+    return [...sorted.slice(startIdx), ...sorted.slice(0, startIdx)];
+  }
+  return cards;
+}
+
+function renderCombos() {
+  const area = document.getElementById('combos-area');
+  area.innerHTML = '';
+
+  for (const combo of (gameState.combos || [])) {
+    const group = document.createElement('div');
+    group.className = 'combo-group';
+    group.dataset.comboId = combo.id;
+
+    const sorted = sortComboCards(combo.cards, combo.type);
+    // 모든 카드 겹쳐서 표시 — 오른쪽 카드가 위에(z-index 높음)
+    // 왼쪽 카드들은 왼쪽 끝(숫자/모양)만 보임, 맨 오른쪽 카드는 완전히 보임
+    sorted.forEach((card, i) => {
+      const el = createCardEl(card, 'small combo-card');
+      el.style.marginLeft = i === 0 ? '0' : '-20px';
+      el.style.zIndex = i;
+      group.appendChild(el);
+    });
+
+    group.onclick = () => handleComboClick(combo.id);
+    area.appendChild(group);
+  }
+}
+
+function createCardEl(card, size = '') {
+  const el = document.createElement('div');
+  el.className = `card ${getCardColorClass(card)}${size ? ' ' + size : ''}`;
+  el.dataset.cardId = card.id;
+  el.appendChild(cardInnerEl(card));
+  return el;
+}
+
+function cardInnerEl(card) {
+  const inner = document.createElement('div');
+  inner.className = 'card-inner';
+  const valueNames = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
+  const suitSymbols = { S: '♠', H: '♥', D: '♦', C: '♣' };
+  inner.innerHTML = `<span>${valueNames[card.value] || card.value}</span><span class="card-suit">${suitSymbols[card.suit]}</span>`;
+  return inner;
+}
+
+function getCardColorClass(card) {
+  return (card.suit === 'H' || card.suit === 'D') ? 'red' : 'black';
+}
+
+function cardName(card) {
+  const valueNames = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
+  const suitSymbols = { S: '♠', H: '♥', D: '♦', C: '♣' };
+  return `${suitSymbols[card.suit]}${valueNames[card.value] || card.value}`;
+}
+
+// ── Actions ────────────────────────────────────────────────────────────
+function isMyTurn() {
+  return gameState?.currentPlayerCode === userCode;
+}
+
+function handleDraw(source) {
+  if (!isMyTurn()) return;
+  if (gameState.phase !== 'draw') return;
+  // 땡큐 활성 중 버린더미 드로우 차단 (덱은 가능)
+  if (source === 'discard' && gameState.thankYou?.active) return;
+  socket.emit('draw', { source });
+  selectedCards.clear();
+}
+
+function toggleCardSelect(cardId, el) {
+  if (!isMyTurn()) return;
+  if (gameState.phase !== 'action') return;
+
+  if (selectedCards.has(cardId)) {
+    selectedCards.delete(cardId);
+    el.classList.remove('selected');
+  } else {
+    selectedCards.add(cardId);
+    el.classList.add('selected');
+  }
+  updateActionButtons(gameState.players.find(p => p.userCode === userCode));
+}
+
+function handleComboClick(comboId) {
+  if (!attachMode) return;
+  const cardIds = [...selectedCards];
+  if (cardIds.length === 0) return;
+  socket.emit('attach', { cardIds, comboId });
+  selectedCards.clear();
+  attachMode = false;
+  document.getElementById('modal-attach').style.display = 'none';
+}
+
+document.getElementById('btn-register').onclick = () => {
+  const cardIds = [...selectedCards];
+  if (cardIds.length === 0) return;
+  socket.emit('register', { cardIds });
+  selectedCards.clear();
+};
+
+document.getElementById('btn-attach').onclick = () => {
+  const cardIds = [...selectedCards];
+  if (cardIds.length === 0) { showNotif('붙일 카드를 선택하세요', 'info'); return; }
+
+  // Show combo selector
+  const list = document.getElementById('attach-combo-list');
+  list.innerHTML = '';
+  for (const combo of (gameState.combos || [])) {
+    const item = document.createElement('div');
+    item.className = 'attach-combo-item';
+    for (const card of combo.cards.slice(0, 3)) {
+      item.appendChild(createCardEl(card, 'small'));
+    }
+    if (combo.cards.length > 3) {
+      const more = document.createElement('span');
+      more.textContent = `+${combo.cards.length - 3}`;
+      more.style.color = '#aaa'; more.style.fontSize = '11px';
+      item.appendChild(more);
+    }
+    item.onclick = () => {
+      socket.emit('attach', { cardIds, comboId: combo.id });
+      selectedCards.clear();
+      attachMode = false;
+      document.getElementById('modal-attach').style.display = 'none';
+    };
+    list.appendChild(item);
+  }
+  attachMode = true;
+  document.getElementById('modal-attach').style.display = 'flex';
+};
+
+document.getElementById('btn-attach-cancel').onclick = () => {
+  attachMode = false;
+  document.getElementById('modal-attach').style.display = 'none';
+};
+
+document.getElementById('btn-discard').onclick = () => {
+  const cardIds = [...selectedCards];
+  if (cardIds.length !== 1) { showNotif('버릴 카드 1장을 선택하세요', 'info'); return; }
+  const cardEl = document.querySelector(`#my-hand [data-card-id="${cardIds[0]}"]`);
+  if (cardEl) {
+    cardEl.classList.remove('selected');
+    cardEl.classList.add('card-leaving');
+    setTimeout(() => {
+      socket.emit('discard', { cardId: cardIds[0] });
+      selectedCards.clear();
+    }, 220);
+  } else {
+    socket.emit('discard', { cardId: cardIds[0] });
+    selectedCards.clear();
+  }
+};
+
+// ── Sort ───────────────────────────────────────────────────────────────
+document.getElementById('btn-sort-num').onclick = () => { sortMode = 'number'; renderMyArea(gameState?.players.find(p => p.userCode === userCode)); };
+document.getElementById('btn-sort-suit').onclick = () => { sortMode = 'suit'; renderMyArea(gameState?.players.find(p => p.userCode === userCode)); };
+document.getElementById('btn-sort-off').onclick = () => { sortMode = null; renderMyArea(gameState?.players.find(p => p.userCode === userCode)); };
+
+document.getElementById('btn-thankyou').onclick = () => {
+  socket.emit('thankYou');
+};
+
+document.getElementById('btn-cancel-thankyou').onclick = () => {
+  if (confirm('취소하면 벌금이 부과됩니다. 취소하시겠습니까?')) {
+    socket.emit('cancelThankYou');
+  }
+};
+
+socket.on('thankYouCancelled', ({ cancellerCode, penalty, gain }) => {
+  if (cancellerCode === userCode) {
+    showNotif(`-${penalty.toLocaleString()}`, 'lose-money');
+  } else {
+    showNotif(`+${gain.toLocaleString()}`, 'win-money');
+  }
+});
+
+function updateActionButtons(me) {
+  if (!me) return;
+  const isTurn = isMyTurn();
+  const phase = gameState?.phase;
+  const hasSelected = selectedCards.size > 0;
+
+  document.getElementById('btn-register').disabled = !isTurn || phase !== 'action' || !hasSelected;
+  document.getElementById('btn-attach').disabled = !isTurn || phase !== 'action' || !hasSelected || !me.registered;
+  document.getElementById('btn-discard').disabled = !isTurn || phase !== 'action' || selectedCards.size !== 1;
+}
+
+// ── Timer ──────────────────────────────────────────────────────────────
+function updateTimer() {
+  if (!gameState) return;
+  if (timerInterval) clearInterval(timerInterval);
+
+  const circle = document.getElementById('timer-circle');
+  const text = document.getElementById('timer-text');
+  const circumference = 163.4;
+
+  // 내 차례가 아니면 카운트다운 안 함
+  if (!isMyTurn()) {
+    timerSeconds = 60;
+    text.textContent = '60';
+    circle.style.strokeDashoffset = '0';
+    circle.classList.remove('urgent');
+    return;
+  }
+
+  timerSeconds = 60;
+
+  function tick() {
+    text.textContent = timerSeconds;
+    const offset = circumference * (1 - timerSeconds / 60);
+    circle.style.strokeDashoffset = offset;
+    circle.classList.toggle('urgent', timerSeconds <= 15);
+    if (timerSeconds <= 0) clearInterval(timerInterval);
+    timerSeconds--;
+  }
+  tick();
+  timerInterval = setInterval(tick, 1000);
+}
+
+// ── Game End ───────────────────────────────────────────────────────────
+socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage }) => {
+  clearInterval(timerInterval);
+
+  const overlay = document.getElementById('overlay-gameend');
+  overlay.style.display = 'flex';
+
+  document.getElementById('win-announcement').textContent = `🏆 ${winnerName} 승리!`;
+  if (winMessage && winnerCode === userCode) {
+    document.getElementById('win-message').textContent = winMessage;
+  }
+
+  if (winnerCode === userCode) launchConfetti();
+
+  document.getElementById('btn-gameend-ok').onclick = () => {
+    overlay.style.display = 'none';
+    showResults(results);
+  };
+});
+
+function showResults(results) {
+  const overlay = document.getElementById('overlay-results');
+  overlay.style.display = 'flex';
+  const tbody = document.getElementById('results-body');
+  tbody.innerHTML = results
+    .sort((a, b) => a.rank - b.rank)
+    .map(r => `<tr>
+      <td>${r.rank}</td>
+      <td>${r.userName}${r.isAI ? ' 🤖' : ''}</td>
+      <td>${r.cardSum}</td>
+      <td style="color:${r.pointChange >= 0 ? '#4caf50' : '#f44336'}">
+        ${r.pointChange >= 0 ? '+' : ''}${r.pointChange?.toLocaleString()}${gameMode === 'multi' ? '원' : 'pt'}
+      </td>
+      <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance + 'pt') : '-'}</td>
+      <td>-</td>
+    </tr>`).join('');
+}
+
+document.getElementById('btn-results-home').onclick = () => { location.href = '/'; };
+
+document.getElementById('btn-results-again').onclick = () => {
+  document.getElementById('overlay-results').style.display = 'none';
+  document.getElementById('overlay-gameend').style.display = 'none';
+  gameState = null;
+  selectedCards.clear();
+  myFixedSeat = null;
+  lastTurnPlayerCode = null;
+  if (gameMode === 'single') {
+    socket.emit('startSingle');
+  } else {
+    socket.emit('playAgain'); // 관리자가 누르면 같은 멤버로 재시작
+  }
+};
+
+// ── Confetti ───────────────────────────────────────────────────────────
+function launchConfetti() {
+  const colors = ['#f1c40f', '#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22'];
+  const container = document.getElementById('confetti-container');
+  container.innerHTML = '';
+  for (let i = 0; i < 80; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.cssText = `
+      left: ${Math.random() * 100}%;
+      top: -10px;
+      background: ${colors[Math.floor(Math.random() * colors.length)]};
+      animation-duration: ${1.5 + Math.random() * 2}s;
+      animation-delay: ${Math.random() * 1}s;
+      transform: rotate(${Math.random() * 360}deg);
+    `;
+    container.appendChild(piece);
+  }
+  setTimeout(() => container.innerHTML = '', 4000);
+}
+
+// ── ThankYou Announce ──────────────────────────────────────────────────
+socket.on('thankYouAnnounce', ({ playerCode, playerName }) => {
+  showThankYouBubble(playerCode, playerName);
+});
+
+function showThankYouBubble(playerCode, playerName) {
+  let targetEl = null;
+  if (playerCode === userCode) {
+    targetEl = document.getElementById('my-character');
+  } else if (gameState) {
+    const positions = ['top', 'left', 'right'];
+    const others = getOtherSeats(myFixedSeat);
+    others.forEach((p, i) => {
+      if (p?.userCode === playerCode) {
+        targetEl = document.getElementById(`player-${positions[i]}`);
+      }
+    });
+  }
+  if (!targetEl) return;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'thankyou-bubble';
+  // 위치별 방향 설정
+  if (targetEl.id === 'player-top') bubble.dataset.dir = 'below';
+  else if (targetEl.id === 'player-left') bubble.dataset.dir = 'right';
+  else if (targetEl.id === 'player-right') bubble.dataset.dir = 'left';
+  else bubble.dataset.dir = 'above';
+  bubble.textContent = '땡큐!';
+  targetEl.style.position = 'relative';
+  targetEl.appendChild(bubble);
+  setTimeout(() => bubble.remove(), 2500);
+}
+
+// ── Game Log ───────────────────────────────────────────────────────────
+socket.on('gameLog', (message) => {
+  addLog(message);
+});
+
+function addLog(msg) {
+  const log = document.getElementById('game-log');
+  const el = document.createElement('div');
+  el.className = 'log-entry';
+  el.textContent = msg;
+  log.prepend(el);
+  // 최대 20줄 유지
+  while (log.children.length > 20) log.removeChild(log.lastChild);
+}
+
+// ── Notifications ──────────────────────────────────────────────────────
+function showNotif(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `notif ${type}`;
+  el.textContent = msg;
+  document.getElementById('notifications').appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}

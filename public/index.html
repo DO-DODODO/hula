@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>훌라</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="screen-login" class="screen active">
+    <div class="login-box">
+      <h1 class="logo">훌라</h1>
+      <input type="text" id="input-usercode" placeholder="코드를 입력하세요" maxlength="20">
+      <button id="btn-login" class="btn-primary">입장</button>
+      <div id="login-error" class="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- Main Screen -->
+  <div id="screen-main" class="screen">
+    <div class="main-header">
+      <span id="main-username" class="username"></span>
+    </div>
+    <div class="main-buttons">
+      <button id="btn-single" class="btn-mode">
+        <span class="mode-label">싱글</span>
+        <span id="single-balance" class="mode-balance"></span>
+      </button>
+      <button id="btn-multi" class="btn-mode">
+        <span class="mode-label">멀티</span>
+        <span id="multi-balance" class="mode-balance"></span>
+      </button>
+      <button id="btn-ranking" class="btn-sub">랭킹</button>
+      <button id="btn-settings" class="btn-sub">설정</button>
+      <button id="btn-help" class="btn-sub">도움말</button>
+    </div>
+  </div>
+
+  <!-- Multi Entry Screen -->
+  <div id="screen-multi-entry" class="screen">
+    <div class="entry-box">
+      <h2>멀티모드 입장</h2>
+      <input type="text" id="input-entrycode" placeholder="입장 코드" maxlength="20">
+      <button id="btn-enter-multi" class="btn-primary">입장</button>
+      <button id="btn-back-multi" class="btn-secondary">뒤로</button>
+      <div id="entry-error" class="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- Waiting Room Screen -->
+  <div id="screen-waiting" class="screen">
+    <div class="waiting-box">
+      <h2>대기 중...</h2>
+      <div id="waiting-players" class="waiting-players"></div>
+      <div id="admin-start-area" style="display:none">
+        <button id="btn-admin-start" class="btn-primary">게임 시작</button>
+        <div id="admin-start-error" class="error-msg"></div>
+      </div>
+      <button id="btn-leave-waiting" class="btn-secondary">나가기</button>
+    </div>
+  </div>
+
+  <!-- Settings Screen -->
+  <div id="screen-settings" class="screen">
+    <div class="settings-box">
+      <h2>설정</h2>
+      <div class="setting-row">
+        <label>승리 문구</label>
+        <input type="text" id="input-win-message" maxlength="30">
+        <button id="btn-save-message" class="btn-primary">저장</button>
+      </div>
+      <div class="setting-row">
+        <label>싱글 포인트</label>
+        <span id="single-points-display"></span>
+        <button id="btn-charge-single" class="btn-secondary">충전</button>
+      </div>
+      <div class="setting-row">
+        <label>멀티 잔액</label>
+        <span id="multi-balance-display"></span>
+        <button id="btn-charge-multi" class="btn-secondary">충전</button>
+      </div>
+      <div id="admin-settings" style="display:none">
+        <hr>
+        <h3>관리자 메뉴</h3>
+        <div class="setting-row">
+          <label>입장 코드</label>
+          <input type="text" id="input-entry-code" maxlength="20">
+          <button id="btn-save-entry-code" class="btn-primary">변경</button>
+        </div>
+        <div class="setting-row">
+          <button id="btn-manage-users" class="btn-secondary">유저 관리</button>
+        </div>
+      </div>
+      <div id="admin-login-area">
+        <button id="btn-admin-mode" class="btn-secondary">관리자 모드</button>
+      </div>
+      <button id="btn-back-settings" class="btn-secondary">뒤로</button>
+      <div id="settings-msg" class="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- Admin Password Modal -->
+  <div id="modal-admin-pw" class="modal" style="display:none">
+    <div class="modal-box">
+      <h3>관리자 비밀번호</h3>
+      <input type="password" id="input-admin-pw" maxlength="30">
+      <button id="btn-admin-pw-ok" class="btn-primary">확인</button>
+      <button id="btn-admin-pw-cancel" class="btn-secondary">취소</button>
+      <div id="admin-pw-error" class="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- User Management Modal -->
+  <div id="modal-users" class="modal" style="display:none">
+    <div class="modal-box large">
+      <h3>유저 관리</h3>
+      <div class="user-form">
+        <input type="text" id="input-new-code" placeholder="코드" maxlength="20">
+        <input type="text" id="input-new-name" placeholder="이름" maxlength="20">
+        <label><input type="checkbox" id="input-new-admin"> 관리자</label>
+        <button id="btn-add-user" class="btn-primary">추가/수정</button>
+      </div>
+      <div id="user-list" class="user-list"></div>
+      <button id="btn-close-users" class="btn-secondary">닫기</button>
+    </div>
+  </div>
+
+  <!-- Ranking Screen -->
+  <div id="screen-ranking" class="screen">
+    <div class="ranking-box">
+      <h2>랭킹</h2>
+      <div class="ranking-tabs">
+        <button id="tab-multi" class="tab-btn active">멀티</button>
+        <button id="tab-single" class="tab-btn">싱글</button>
+      </div>
+      <div id="ranking-list" class="ranking-list"></div>
+      <button id="btn-back-ranking" class="btn-secondary">뒤로</button>
+    </div>
+  </div>
+
+  <!-- Help Screen -->
+  <div id="screen-help" class="screen">
+    <div class="help-box">
+      <h2>도움말</h2>
+      <div class="help-content">
+        <h3>기본 규칙</h3>
+        <p>52장 덱, 7장씩 배분. 패가 0장이 되면 승리!</p>
+        <h3>턴 진행</h3>
+        <p>1. <b>드로우</b>: 카드 더미 또는 버린 더미에서 1장</p>
+        <p>2. <b>등록/붙이기</b>: 유효한 조합 등록, 이후 붙이기 가능</p>
+        <p>3. <b>버리기</b>: 1장 버림 → 턴 종료</p>
+        <h3>등록 조합</h3>
+        <p>• 같은 숫자 3장 이상</p>
+        <p>• 같은 무늬 연속 숫자 3장 이상 (순환 허용)</p>
+        <p>• 7은 1장 단독 등록 가능</p>
+        <h3>땡큐</h3>
+        <p>카드가 버려지면 땡큐 버튼 활성화. 먼저 누른 1명만 획득!</p>
+        <p>취소 시 벌금: (다른 플레이어 수 × 100원)</p>
+        <h3>정산</h3>
+        <p>승자: 패자 카드합 × 100원 수취</p>
+        <p>패자: 카드합 × 100원 지불 (미등록 시 2배)</p>
+      </div>
+      <button id="btn-back-help" class="btn-secondary">뒤로</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
