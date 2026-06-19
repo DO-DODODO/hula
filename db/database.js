@@ -49,7 +49,7 @@ async function init() {
 
   await db.query(sql`INSERT OR IGNORE INTO settings (key, value) VALUES ('entryCode', '1234')`);
   await db.query(sql`INSERT OR IGNORE INTO settings (key, value) VALUES ('adminPassword', 'dd291234')`);
-  await db.query(sql`INSERT OR IGNORE INTO users (userCode, userName, isAdmin) VALUES ('dd', '관리자', 1)`);
+  await db.query(sql`INSERT OR IGNORE INTO users (userCode, userName, isAdmin) VALUES ('kkkyyy123', '관리자', 1)`);
 }
 
 async function getUser(userCode) {

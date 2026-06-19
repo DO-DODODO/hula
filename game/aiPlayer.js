@@ -1,16 +1,17 @@
 const { isValidCombo, getComboType, canAttach, getComboTypeAfterAttach, handScore } = require('./cardUtils');
 
 // Check if card is useful to AI hand
-function isCardUseful(card, hand) {
-  // Check if adding this card to hand creates or extends a potential combo
-  for (let i = 0; i < hand.length; i++) {
-    for (let j = i + 1; j < hand.length; j++) {
-      if (isValidCombo([hand[i], hand[j], card])) return true;
+function isCardUseful(card, hand, existingCombos = [], playerRegistered = false) {
+  // 등록 완료: 기존 조합에 붙이기 가능한지 확인
+  if (playerRegistered) {
+    for (const combo of existingCombos) {
+      if (canAttach(combo, card)) return true;
     }
   }
-  // 7 is always somewhat useful (solo register)
-  if (card.value === 7) return true;
-  return false;
+  // runAITurn과 동일한 findCombos로 실제 등록 가능 여부 확인
+  const testHand = [...hand, card];
+  const combos = findCombos(testHand);
+  return combos.some(cb => cb.cards.some(c => c.id === card.id));
 }
 
 // Find all valid combos in hand

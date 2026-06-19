@@ -24,6 +24,7 @@ const sessions = new Map();
 const waitingRoom = new Map();
 let activeGame = null;
 const singleGames = new Map();
+const lastSingleWinners = new Map(); // socket.id → 마지막 싱글 승자 userCode
 let lastMultiGamePlayers = null;
 let lastMultiGameWinnerCode = null;
 const entryAttempts = new Map(); // socket.id → 시도 횟수
@@ -89,8 +90,8 @@ function handleTimeout(game) {
         const cur = getCurrentPlayer(game);
         for (const p of game.players) {
           if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
-          const useful = isCardUseful(card, p.hand);
-          const d = useful ? 3000 + Math.random() * 2000 : 5000 + Math.random() * 2000;
+          const useful = isCardUseful(card, p.hand, game.combos, p.registered);
+          const d = useful ? 3000 + Math.random() * 4000 : 5000 + Math.random() * 3000;
           if (useful ? Math.random() < 0.6 : Math.random() < 0.1) {
             setTimeout(() => {
               if (!game.thankYou.active || game.thankYou.lock) return;
@@ -105,7 +106,7 @@ function handleTimeout(game) {
             }, d);
           }
         }
-        if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1000);
+        if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
       }
     }, 1200);
 
@@ -133,39 +134,42 @@ function activateThankYouWindow(game, card) {
   const discarderCode = getCurrentPlayer(game)?.userCode;
   activateThankYou(game, card, discarderCode);
 
-  // 즉시 다음 턴으로 — 땡큐 창은 다음 플레이어가 덱에서 드로우할 때까지 유지
+  // 살짝 텀 후 다음 턴으로 전환 (카드 버리는 애니메이션 여운)
   nextTurn(game);
-  broadcastGame(game);
 
-  const cur = getCurrentPlayer(game);
-  if (!cur) return;
-  startTimer(game);
+  setTimeout(() => {
+    broadcastGame(game);
 
-  // 현재 플레이어·버린 플레이어 제외한 다른 AI가 땡큐 고려 (5-7초 후)
-  for (const p of game.players) {
-    if (!p.isAI || p.userCode === cur.userCode || p.userCode === discarderCode) continue;
-    const useful = isCardUseful(card, p.hand);
-    const d = useful ? 5000 + Math.random() * 2000 : 6000 + Math.random() * 2000;
-    const doIt = useful ? Math.random() < 0.7 : Math.random() < 0.1;
-    if (doIt) {
-      setTimeout(() => {
-        if (!game.thankYou.active || game.thankYou.lock) return;
-        const r = tryThankYou(game, p.userCode);
-        if (r.ok) {
-          const cty = confirmThankYou(game, p.userCode);
-          broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
-          broadcastGame(game);
-          startTimer(game);
-          setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
-        }
-      }, d);
+    const cur = getCurrentPlayer(game);
+    if (!cur) return;
+    startTimer(game);
+
+    // 현재 플레이어·버린 플레이어 제외한 다른 AI가 땡큐 고려 (3~7초 랜덤)
+    for (const p of game.players) {
+      if (!p.isAI || p.userCode === cur.userCode || p.userCode === discarderCode) continue;
+      const useful = isCardUseful(card, p.hand, game.combos, p.registered);
+      const d = useful ? 3000 + Math.random() * 4000 : 5000 + Math.random() * 3000;
+      const doIt = useful ? Math.random() < 0.75 : Math.random() < 0.15;
+      if (doIt) {
+        setTimeout(() => {
+          if (!game.thankYou.active || game.thankYou.lock) return;
+          const r = tryThankYou(game, p.userCode);
+          if (r.ok) {
+            const cty = confirmThankYou(game, p.userCode);
+            broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
+            broadcastGame(game);
+            startTimer(game);
+            setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+          }
+        }, d);
+      }
     }
-  }
 
-  // 현재 플레이어가 AI면 덱에서 드로우 (땡큐 창 닫힘)
-  if (cur.isAI) {
-    setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1000);
-  }
+    // 현재 플레이어가 AI면 드로우 (2~5초 랜덤 → 땡큐와 타이밍 겹침)
+    if (cur.isAI) {
+      setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 3000);
+    }
+  }, 300);
 }
 
 function clearThankYouTimeout(game) {
@@ -182,7 +186,7 @@ function advanceTurn(game, winnerCode = null) {
   if (!cur) return;
   if (cur.isAI) {
     startTimer(game);
-    setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1000);
+    setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
   } else {
     startTimer(game);
   }
@@ -230,7 +234,7 @@ async function runAITurn(game, aiPlayer) {
       if (comboWithCard) {
         const r = registerCards(game, aiPlayer.userCode, comboWithCard.cards.map(c => c.id));
         broadcastLog(game, `${aiPlayer.userName} 조합 등록!`);
-        if (r.win) { endGame(game, aiPlayer.userCode); return; }
+        if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
         broadcastGame(game);
         await sleep(500);
       } else {
@@ -241,7 +245,7 @@ async function runAITurn(game, aiPlayer) {
             const r = attachCards(game, aiPlayer.userCode, [takerCard.id], combo.id);
             if (r.ok) {
               broadcastLog(game, `${aiPlayer.userName} 카드 붙이기`);
-              if (r.win) { endGame(game, aiPlayer.userCode); return; }
+              if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
               broadcastGame(game);
               await sleep(400);
               attached = true;
@@ -260,12 +264,16 @@ async function runAITurn(game, aiPlayer) {
             for (const p of others) {
               if (!p.isAI) game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
             }
+            // 클라이언트에 취소 알림 (말풍선용)
+            for (const p of game.players) {
+              if (!p.isAI) emitToPlayer(p.userCode, 'thankYouCancelled', { cancellerCode: aiPlayer.userCode, penalty, gain: unit });
+            }
             broadcastLog(game, `${aiPlayer.userName} 땡큐 취소 (벌금 부과)`);
             setTimeout(() => {
               broadcastGame(game);
               if (game.thankYou.active) {
                 const cur = getCurrentPlayer(game);
-                if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1000);
+                if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
               }
             }, 1200);
           }
@@ -280,7 +288,7 @@ async function runAITurn(game, aiPlayer) {
     if (action.type === 'register') {
       const r = registerCards(game, aiPlayer.userCode, action.cards.map(c => c.id));
       broadcastLog(game, `${aiPlayer.userName} 조합 등록!`);
-      if (r.win) { endGame(game, aiPlayer.userCode); return; }
+      if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
       broadcastGame(game);
       await sleep(500);
     }
@@ -291,7 +299,7 @@ async function runAITurn(game, aiPlayer) {
     for (const a of attaches) {
       const r = attachCards(game, aiPlayer.userCode, [a.card.id], a.comboId);
       broadcastLog(game, `${aiPlayer.userName} 카드 붙이기`);
-      if (r.win) { endGame(game, aiPlayer.userCode); return; }
+      if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
       broadcastGame(game);
       await sleep(400);
     }
@@ -305,7 +313,7 @@ async function runAITurn(game, aiPlayer) {
 
   broadcastLog(game, `${aiPlayer.userName} 카드 버림`);
   clearTimer(game);
-  if (dr.win) { endGame(game, aiPlayer.userCode); return; }
+  if (dr.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
   if (game.lastDeckDraw) { game.lastDeckDraw = false; endGame(game, null); return; }
   activateThankYouWindow(game, dr.card);
 }
@@ -337,6 +345,9 @@ async function endGame(game, winnerCode) {
   game.status = 'ended';
 
   const results = calculateResults(game, winnerCode);
+  // 실제 1등(덱 소진 시에도 포함)을 다음 판 선공 결정에 활용
+  const actualWinnerCode = results.find(r => r.rank === 1)?.userCode || null;
+
   await db.saveGameResult(game.id, game.mode, results);
 
   for (const r of results) {
@@ -344,6 +355,7 @@ async function endGame(game, winnerCode) {
       const user = await db.getUser(r.userCode);
       r.currentBalance = game.mode === 'multi' ? user?.multiBalance : user?.singlePoints;
       r.totalWins = game.mode === 'multi' ? (user?.multiWins ?? 0) : (user?.singleWins ?? 0);
+      r.totalGames = game.mode === 'multi' ? (user?.multiGames ?? 0) : (user?.singleGames ?? 0);
     }
   }
 
@@ -353,20 +365,24 @@ async function endGame(game, winnerCode) {
     if (!p.isAI) {
       const user = await db.getUser(p.userCode);
       emitToPlayer(p.userCode, 'gameEnd', {
-        results, winnerCode, winnerName,
-        winMessage: winnerCode === p.userCode ? user?.winMessage : null
+        results, winnerCode: actualWinnerCode, winnerName,
+        winMessage: actualWinnerCode === p.userCode ? user?.winMessage : null
       });
     }
   }
 
   if (game.mode === 'single') {
-    const sid = getSocketId(game.players.find(p => !p.isAI)?.userCode);
-    if (sid) singleGames.delete(sid);
+    const humanPlayer = game.players.find(p => !p.isAI);
+    const sid = getSocketId(humanPlayer?.userCode);
+    if (sid) {
+      lastSingleWinners.set(sid, actualWinnerCode);
+      singleGames.delete(sid);
+    }
   } else {
     lastMultiGamePlayers = game.players.map(p => ({
-      userCode: p.userCode, userName: p.userName, isAI: p.isAI
+      userCode: p.userCode, userName: p.userName, isAI: p.isAI, avatar: p.avatar
     }));
-    lastMultiGameWinnerCode = winnerCode;
+    lastMultiGameWinnerCode = actualWinnerCode;
     activeGame = null;
   }
 }
@@ -385,6 +401,14 @@ io.on('connection', (socket) => {
       singlePoints: user.singlePoints, multiBalance: user.multiBalance,
       winMessage: user.winMessage, avatar: user.avatar || 'person'
     });
+    // game.html로 이동 후 새 소켓으로 재접속한 경우 → 플레이어 복구 후 게임 상태 재전송
+    if (activeGame && activeGame.status === 'playing') {
+      const player = activeGame.players.find(p => p.userCode === user.userCode);
+      if (player) {
+        player.isAI = false; // 잠깐 끊긴 동안 AI로 전환된 것 복구
+        socket.emit('gameState', getPublicState(activeGame, user.userCode));
+      }
+    }
   });
 
   socket.on('adminLogin', async ({ password }) => {
@@ -480,10 +504,22 @@ io.on('connection', (socket) => {
       { userCode: 'AI_2', userName: '강아지', isAI: true, avatar: 'dog' },
       { userCode: 'AI_3', userName: '호랑이', isAI: true, avatar: 'tiger' }
     ].sort(() => Math.random() - 0.5);
-    const players = [
-      { userCode: user.userCode, userName: user.userName, isAI: false, singlePoints: user.singlePoints, avatar: user.avatar || 'person' },
-      ...aiPlayers
-    ];
+    const humanPlayer = { userCode: user.userCode, userName: user.userName, isAI: false, singlePoints: user.singlePoints, avatar: user.avatar || 'person' };
+
+    // 지난 판 1등이 다음 판 선공
+    const lastWinnerCode = lastSingleWinners.get(socket.id);
+    let players;
+    if (lastWinnerCode && lastWinnerCode !== user.userCode) {
+      const winnerAI = aiPlayers.find(p => p.userCode === lastWinnerCode);
+      if (winnerAI) {
+        const otherAIs = aiPlayers.filter(p => p.userCode !== lastWinnerCode);
+        players = [winnerAI, humanPlayer, ...otherAIs];
+      } else {
+        players = [humanPlayer, ...aiPlayers];
+      }
+    } else {
+      players = [humanPlayer, ...aiPlayers];
+    }
 
     const game = createGame('single', players);
     singleGames.set(socket.id, game);
@@ -544,13 +580,12 @@ io.on('connection', (socket) => {
       const u = await db.getUser(uc);
       humanPlayers.push({ userCode: u.userCode, userName: u.userName, isAI: false, multiBalance: u.multiBalance, avatar: u.avatar || 'person' });
     }
-    const aiNames = ['돼지', '강아지', '호랑이'];
-    const aiAvatars = ['pig', 'dog', 'tiger'];
-    const aiPlayers = [];
-    for (let i = humanPlayers.length + 1; i <= 4; i++) {
-      const idx = i - 1;
-      aiPlayers.push({ userCode: `AI_${i}`, userName: aiNames[idx] || `AI${i}`, isAI: true, avatar: aiAvatars[idx] || 'pig' });
-    }
+    const aiPool = [
+      { userCode: 'AI_1', userName: '돼지', isAI: true, avatar: 'pig' },
+      { userCode: 'AI_2', userName: '호랑이', isAI: true, avatar: 'tiger' },
+      { userCode: 'AI_3', userName: '강아지', isAI: true, avatar: 'dog' },
+    ];
+    const aiPlayers = aiPool.slice(0, 4 - humanPlayers.length);
 
     const allPlayers = [...humanPlayers, ...aiPlayers].sort(() => Math.random() - 0.5);
     activeGame = createGame('multi', allPlayers);
@@ -570,15 +605,27 @@ io.on('connection', (socket) => {
     if (!sess) return;
     const me = await db.getUser(sess.userCode);
     if (!me?.isAdmin) return;
-    if (!activeGame) return;
-    clearTimer(activeGame);
-    clearThankYouTimeout(activeGame);
-    activeGame.status = 'ended';
-    for (const p of activeGame.players) {
-      if (!p.isAI) emitToPlayer(p.userCode, 'gameStopped', {});
+
+    if (activeGame) {
+      clearTimer(activeGame);
+      clearThankYouTimeout(activeGame);
+      activeGame.status = 'ended';
+      for (const p of activeGame.players) {
+        if (!p.isAI) emitToPlayer(p.userCode, 'gameStopped', {});
+      }
+      activeGame = null;
+      waitingRoom.clear();
+    } else {
+      // 싱글모드: 어드민 본인의 싱글 게임 중단
+      const singleGame = singleGames.get(socket.id);
+      if (singleGame) {
+        clearTimer(singleGame);
+        clearThankYouTimeout(singleGame);
+        singleGame.status = 'ended';
+        singleGames.delete(socket.id);
+      }
+      socket.emit('gameStopped', {});
     }
-    activeGame = null;
-    waitingRoom.clear();
   });
 
   socket.on('draw', ({ source }) => {
@@ -605,7 +652,7 @@ io.on('connection', (socket) => {
     if (!result.ok) { socket.emit('actionError', result.msg); return; }
     broadcastLog(game, `${sess.userName} 조합 등록!`);
     broadcastGame(game);
-    if (result.win) { endGame(game, sess.userCode); return; }
+    if (result.win) { setTimeout(() => endGame(game, sess.userCode), 1000); return; }
   });
 
   socket.on('attach', ({ cardIds, comboId }) => {
@@ -617,7 +664,7 @@ io.on('connection', (socket) => {
     if (!result.ok) { socket.emit('actionError', result.msg); return; }
     broadcastLog(game, `${sess.userName} 카드 붙이기`);
     broadcastGame(game);
-    if (result.win) { endGame(game, sess.userCode); return; }
+    if (result.win) { setTimeout(() => endGame(game, sess.userCode), 1000); return; }
   });
 
   socket.on('discard', ({ cardId }) => {
@@ -631,7 +678,7 @@ io.on('connection', (socket) => {
     clearTimer(game);
     if (result.win) {
       broadcastGame(game); // 빈 패 먼저 보여주기
-      setTimeout(() => endGame(game, sess.userCode), 700);
+      setTimeout(() => endGame(game, sess.userCode), 1000);
       return;
     }
     if (game.lastDeckDraw) {
@@ -695,7 +742,7 @@ io.on('connection', (socket) => {
       for (const p of game.players) {
         if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
         const useful = isCardUseful(card, p.hand);
-        const d = useful ? 3000 + Math.random() * 2000 : 5000 + Math.random() * 2000;
+        const d = useful ? 3000 + Math.random() * 4000 : 5000 + Math.random() * 3000;
         const doIt = useful ? Math.random() < 0.6 : Math.random() < 0.1;
         if (doIt) {
           setTimeout(() => {
@@ -716,7 +763,7 @@ io.on('connection', (socket) => {
     // 원래 차례 플레이어 타이머 시작
     const cur = getCurrentPlayer(game);
     startTimer(game);
-    if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1000);
+    if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
   });
 
   socket.on('playAgain', async () => {

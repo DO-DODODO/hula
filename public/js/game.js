@@ -29,11 +29,18 @@ let attachMode = false;
 let myFixedSeat = null;
 let sortMode = null;
 let lastTurnPlayerCode = null;
+let lastDrawSource = null; // 'deck' | 'discard' | 'thankYou'
+let prevHandCounts = new Map(); // userCode → handCount
 
 // ── Init ───────────────────────────────────────────────────────────────
-socket.emit('login', { userCode });
+// connect는 최초 연결 + 재연결 모두 발생하므로 여기서 login 전송
+socket.on('connect', () => {
+  socket.emit('login', { userCode });
+});
+
 socket.on('loginSuccess', () => {
-  if (gameMode === 'single') {
+  // 이미 게임 중이면 재시작하지 않음 (재연결 시 중복 방지)
+  if (gameMode === 'single' && !gameState) {
     socket.emit('startSingle');
   }
   // Multi: server sends gameState automatically
@@ -56,6 +63,8 @@ socket.on('gameState', (state) => {
     myFixedSeat = null;
     lastTurnPlayerCode = null;
     prevThankYouActive = false;
+    prevComboTotal = 0;
+    prevHandCounts.clear();
     if (state.id !== gameState?.id) showDealingAnimation();
   }
   // 버린 더미 flip: 땡큐 창이 닫힐 때 (드로우로 덮임)
@@ -94,14 +103,20 @@ socket.on('actionError', (msg) => showNotif(msg, 'info'));
 socket.on('deckEmpty', () => showNotif('카드 덱이 소진됐습니다! 이번 버림 후 카드 합산으로 순위 결정', 'info'));
 
 // ── Render ─────────────────────────────────────────────────────────────
+let prevComboTotal = 0; // 이전 렌더 시점 콤보 카드 총 수
+
 function render() {
   if (!gameState) return;
   const me = gameState.players.find(p => p.userCode === userCode);
   const others = getOtherSeats(myFixedSeat ?? me?.seatIndex);
 
-  renderPlayer('top', others[0]);
-  renderPlayer('left', others[1]);
-  renderPlayer('right', others[2]);
+  const currentComboTotal = (gameState.combos || []).reduce((s, c) => s + c.cards.length, 0);
+  const comboGrew = currentComboTotal > prevComboTotal;
+  prevComboTotal = currentComboTotal;
+
+  renderPlayer('top', others[0], comboGrew);
+  renderPlayer('left', others[1], comboGrew);
+  renderPlayer('right', others[2], comboGrew);
   renderMyArea(me);
   renderCenter();
   updateActionButtons(me);
@@ -119,13 +134,26 @@ function getOtherSeats(mySeat) {
   return [positions[1], positions[2], positions[0]]; // top, left, right
 }
 
-function renderPlayer(pos, player) {
+function renderPlayer(pos, player, comboGrew = false) {
   const el = document.getElementById(`player-${pos}`);
   if (!player) { el.style.visibility = 'hidden'; return; }
   el.style.visibility = '';
 
   const isCurrent = gameState.currentPlayerCode === player.userCode;
   el.classList.toggle('active', isCurrent);
+
+  // 상대방 카드 수 변화 감지 → 모션
+  const prevCount = prevHandCounts.get(player.userCode) ?? player.handCount;
+  if (player.handCount > prevCount) {
+    flyCard(document.getElementById('deck-card'), el);
+  } else if (player.handCount < prevCount) {
+    // 등록/붙이기면 가운데(콤보 영역)로, 버리기면 버린더미로
+    const toEl = comboGrew
+      ? document.getElementById('combos-area')
+      : document.getElementById('discard-card');
+    flyCard(el, toEl, false, null, comboGrew ? 380 : 550);
+  }
+  prevHandCounts.set(player.userCode, player.handCount);
 
   const avatarEmoji = AVATAR_MAP[player.avatar] || (player.isAI ? '🤖' : '👤');
   el.querySelector('.player-name').textContent = avatarEmoji + ' ' + player.userName;
@@ -320,6 +348,56 @@ function getCardColorClass(card) {
   return (card.suit === 'H' || card.suit === 'D') ? 'red' : 'black';
 }
 
+function flyCard(fromEl, toEl, faceUp = false, cardData = null, duration = 380) {
+  if (!fromEl || !toEl) return;
+  const from = fromEl.getBoundingClientRect();
+  const to = toEl.getBoundingClientRect();
+  if (!from.width || !from.height || !to.width || !to.height) return;
+
+  // 카드 크기 고정 (작은 카드 크기)
+  const cardW = Math.min(from.width, 52);
+  const cardH = Math.min(from.height, 72);
+
+  // 출발: fromEl 중앙
+  const startLeft = from.left + (from.width - cardW) / 2;
+  const startTop  = from.top  + (from.height - cardH) / 2;
+
+  // 도착: toEl 중앙
+  const endLeft = to.left + (to.width  - cardW) / 2;
+  const endTop  = to.top  + (to.height - cardH) / 2;
+
+  const clone = document.createElement('div');
+  clone.className = faceUp && cardData
+    ? `card small ${getCardColorClass(cardData)}`
+    : 'card small card-back';
+  if (faceUp && cardData) clone.appendChild(cardInnerEl(cardData));
+
+  Object.assign(clone.style, {
+    position: 'fixed',
+    left: startLeft + 'px',
+    top: startTop + 'px',
+    width: cardW + 'px',
+    height: cardH + 'px',
+    zIndex: '999',
+    pointerEvents: 'none',
+    transition: 'none',
+    boxShadow: '2px 4px 16px rgba(0,0,0,0.6)',
+    borderRadius: '6px',
+  });
+  document.body.appendChild(clone);
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const dur = duration;
+    Object.assign(clone.style, {
+      transition: `left ${dur}ms cubic-bezier(.25,0.46,0.45,0.94), top ${dur}ms cubic-bezier(.25,0.46,0.45,0.94), opacity ${Math.round(dur*0.47)}ms ease ${Math.round(dur*0.84)}ms`,
+      left: endLeft + 'px',
+      top: endTop + 'px',
+      opacity: '0',
+    });
+    setTimeout(() => clone.remove(), dur + 140);
+  }));
+}
+
 function cardName(card) {
   const valueNames = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
   const suitSymbols = { S: '♠', H: '♥', D: '♦', C: '♣' };
@@ -334,8 +412,16 @@ function isMyTurn() {
 function handleDraw(source) {
   if (!isMyTurn()) return;
   if (gameState.phase !== 'draw') return;
-  // 땡큐 활성 중 버린더미 드로우 차단 (덱은 가능)
   if (source === 'discard' && gameState.thankYou?.active) return;
+
+  const fromEl = source === 'discard'
+    ? document.getElementById('discard-card')
+    : document.getElementById('deck-card');
+  // 버린더미에서 가져갈 땐 앞면, 덱에서 가져갈 땐 뒷면
+  const discardCard = source === 'discard' ? gameState.discardPile?.top : null;
+  flyCard(fromEl, document.getElementById('my-hand'), source === 'discard', discardCard);
+  lastDrawSource = source;
+
   socket.emit('draw', { source });
   selectedCards.clear();
 }
@@ -374,22 +460,21 @@ document.getElementById('btn-register').onclick = () => {
 document.getElementById('btn-attach').onclick = () => {
   const cardIds = [...selectedCards];
   if (cardIds.length === 0) { showNotif('붙일 카드를 선택하세요', 'info'); return; }
+  if (cardIds.length > 1) { showNotif('한장씩 선택하여 붙이기 해주세요', 'info'); return; }
 
-  // Show combo selector
+  // Show combo selector (판에 깔린 순서대로, 카드 겹쳐서 표시)
   const list = document.getElementById('attach-combo-list');
   list.innerHTML = '';
   for (const combo of (gameState.combos || [])) {
     const item = document.createElement('div');
     item.className = 'attach-combo-item';
-    for (const card of combo.cards.slice(0, 3)) {
-      item.appendChild(createCardEl(card, 'small'));
-    }
-    if (combo.cards.length > 3) {
-      const more = document.createElement('span');
-      more.textContent = `+${combo.cards.length - 3}`;
-      more.style.color = '#aaa'; more.style.fontSize = '11px';
-      item.appendChild(more);
-    }
+    const sorted = sortComboCards(combo.cards, combo.type);
+    sorted.forEach((card, i) => {
+      const el = createCardEl(card, 'small combo-card');
+      el.style.marginLeft = i === 0 ? '0' : '-20px';
+      el.style.zIndex = i;
+      item.appendChild(el);
+    });
     item.onclick = () => {
       socket.emit('attach', { cardIds, comboId: combo.id });
       selectedCards.clear();
@@ -414,6 +499,7 @@ document.getElementById('btn-discard').onclick = () => {
   if (cardEl) {
     cardEl.classList.remove('selected');
     cardEl.classList.add('card-leaving');
+    flyCard(cardEl.querySelector('.card'), document.getElementById('discard-card'));
     setTimeout(() => {
       socket.emit('discard', { cardId: cardIds[0] });
       selectedCards.clear();
@@ -436,6 +522,9 @@ document.getElementById('btn-thankyou').onclick = () => {
     if (state?.lock) showNotif('이미 선점됐어요', 'info');
     return;
   }
+  // 땡큐: 어떤 카드인지 알고 있으니 앞면으로 표시
+  flyCard(document.getElementById('discard-card'), document.getElementById('my-hand'), true, gameState.thankYou?.card);
+  lastDrawSource = 'thankYou';
   socket.emit('thankYou');
 };
 
@@ -445,6 +534,12 @@ socket.on('thankYouFailed', ({ msg }) => {
 });
 
 document.getElementById('btn-cancel-thankyou').onclick = () => {
+  const othersCount = (gameState?.players?.length ?? 4) - 1;
+  const unit = gameMode === 'multi' ? 100 : 1;
+  const suffix = gameMode === 'multi' ? '원' : 'pt';
+  const penalty = unit * othersCount;
+  document.getElementById('cancel-penalty-text').innerHTML =
+    `취소하면 벌금 <strong>-${penalty}${suffix}</strong>이 부과됩니다.<br>나머지 플레이어에게 +${unit}${suffix}씩 지급됩니다.`;
   document.getElementById('modal-cancel-confirm').style.display = 'flex';
 };
 document.getElementById('btn-cancel-confirm-no').onclick = () => {
@@ -456,6 +551,7 @@ document.getElementById('btn-cancel-confirm-yes').onclick = () => {
 };
 
 socket.on('thankYouCancelled', ({ cancellerCode, penalty, gain, auto }) => {
+  showBubble(cancellerCode, '땡큐 취소! 😭', true);
   if (cancellerCode === userCode) {
     if (auto) {
       document.getElementById('auto-cancel-penalty').textContent = `-${penalty.toLocaleString()}원`;
@@ -542,16 +638,22 @@ function showResults(results) {
   const tbody = document.getElementById('results-body');
   tbody.innerHTML = results
     .sort((a, b) => a.rank - b.rank)
-    .map(r => `<tr>
-      <td>${r.rank}</td>
-      <td>${r.userName}${r.isAI ? ' 🤖' : ''}</td>
-      <td>${r.cardSum}</td>
-      <td style="color:${r.pointChange >= 0 ? '#4caf50' : '#f44336'}">
-        ${r.pointChange >= 0 ? '+' : ''}${r.pointChange?.toLocaleString()}${gameMode === 'multi' ? '원' : 'pt'}
-      </td>
-      <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance + 'pt') : '-'}</td>
-      <td>${r.totalWins !== undefined ? r.totalWins + '승' : '-'}</td>
-    </tr>`).join('');
+    .map(r => {
+      const avatarEmoji = AVATAR_MAP[r.avatar] || (r.isAI ? '🤖' : '👤');
+      const winRate = (r.totalGames > 0)
+        ? Math.round(r.totalWins / r.totalGames * 100) + '%'
+        : (r.isAI ? '-' : '-');
+      return `<tr>
+        <td>${r.rank}</td>
+        <td>${avatarEmoji} ${r.userName}</td>
+        <td>${r.cardSum}</td>
+        <td style="color:${r.pointChange >= 0 ? '#4caf50' : '#f44336'}">
+          ${r.pointChange >= 0 ? '+' : ''}${r.pointChange?.toLocaleString()}${gameMode === 'multi' ? '원' : 'pt'}
+        </td>
+        <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance + 'pt') : '-'}</td>
+        <td>${winRate}</td>
+      </tr>`;
+    }).join('');
 }
 
 document.getElementById('btn-results-home').onclick = () => { location.href = '/'; };
@@ -623,32 +725,35 @@ socket.on('thankYouAnnounce', ({ playerCode, playerName }) => {
   showThankYouBubble(playerCode, playerName);
 });
 
-function showThankYouBubble(playerCode, playerName) {
-  let targetEl = null;
-  if (playerCode === userCode) {
-    targetEl = document.getElementById('my-character');
-  } else if (gameState) {
-    const positions = ['top', 'left', 'right'];
-    const others = getOtherSeats(myFixedSeat);
-    others.forEach((p, i) => {
-      if (p?.userCode === playerCode) {
-        targetEl = document.getElementById(`player-${positions[i]}`);
-      }
-    });
+function getPlayerEl(playerCode) {
+  if (playerCode === userCode) return document.getElementById('my-character');
+  if (!gameState) return null;
+  const positions = ['top', 'left', 'right'];
+  const others = getOtherSeats(myFixedSeat);
+  for (let i = 0; i < others.length; i++) {
+    if (others[i]?.userCode === playerCode) return document.getElementById(`player-${positions[i]}`);
   }
+  return null;
+}
+
+function showBubble(playerCode, text, isCancel = false) {
+  const targetEl = getPlayerEl(playerCode);
   if (!targetEl) return;
 
   const bubble = document.createElement('div');
-  bubble.className = 'thankyou-bubble';
-  // 위치별 방향 설정
+  bubble.className = 'thankyou-bubble' + (isCancel ? ' cancel' : '');
   if (targetEl.id === 'player-top') bubble.dataset.dir = 'below';
   else if (targetEl.id === 'player-left') bubble.dataset.dir = 'right';
   else if (targetEl.id === 'player-right') bubble.dataset.dir = 'left';
   else bubble.dataset.dir = 'above';
-  bubble.textContent = '땡큐!';
+  bubble.textContent = text;
   targetEl.style.position = 'relative';
   targetEl.appendChild(bubble);
   setTimeout(() => bubble.remove(), 2500);
+}
+
+function showThankYouBubble(playerCode, playerName) {
+  showBubble(playerCode, '땡큐! 😊');
 }
 
 // ── Game Log ───────────────────────────────────────────────────────────

@@ -338,6 +338,7 @@ function calculateResults(game, winnerCode = null) {
       userCode: p.userCode,
       userName: p.userName,
       isAI: p.isAI,
+      avatar: p.avatar,
       hand: p.hand,
       cardSum,
       registered: p.registered,

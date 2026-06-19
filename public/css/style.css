@@ -129,6 +129,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   height: clamp(62px, 7vw, 98px);
   cursor: pointer; position: relative;
   flex-shrink: 0; user-select: none;
+  transition: opacity 0.1s ease;
 }
 .card-slot.selected { z-index: 2; }
 .card-slot.selected .card { transform: translateY(-14px); box-shadow: 0 6px 16px rgba(255,215,0,0.9); border-color: gold; border-width: 2px; }
@@ -266,8 +267,11 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   padding: 5px 14px;
   border-radius: 20px;
   white-space: nowrap;
-  z-index: 60;
+  z-index: 150;
   pointer-events: none;
+}
+.thankyou-bubble.cancel {
+  background: rgba(80, 80, 80, 0.93);
 }
 /* 위(above, 기본) */
 .thankyou-bubble[data-dir="above"] {
@@ -383,5 +387,5 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 /* ── Attach Modal ────────────────────────────────────────────────────── */
 #attach-combo-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
-.attach-combo-item { display: flex; align-items: center; gap: 4px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; cursor: pointer; flex-wrap: wrap; }
+.attach-combo-item { display: flex; align-items: center; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 6px; cursor: pointer; overflow: visible; }
 .attach-combo-item:hover { background: rgba(255,215,0,0.15); }

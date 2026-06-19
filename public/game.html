@@ -135,7 +135,7 @@
   <div id="modal-cancel-confirm" class="modal" style="display:none">
     <div class="modal-box" style="text-align:center;gap:16px">
       <h3>취소 확인</h3>
-      <p style="color:#f44336;font-size:14px">취소하면 벌금 <strong>-300원</strong>이 부과됩니다.<br>나머지 플레이어에게 +100원씩 지급됩니다.</p>
+      <p id="cancel-penalty-text" style="color:#f44336;font-size:14px">취소하면 벌금 <strong>-300원</strong>이 부과됩니다.<br>나머지 플레이어에게 +100원씩 지급됩니다.</p>
       <div style="display:flex;gap:8px;justify-content:center">
         <button id="btn-cancel-confirm-yes" class="btn-danger">확인</button>
         <button id="btn-cancel-confirm-no" class="btn-secondary">닫기</button>
@@ -163,7 +163,7 @@
       <table id="results-table">
         <thead>
           <tr>
-            <th>순위</th><th>이름</th><th>카드점수</th><th>이번 게임</th><th>보유</th><th>총 승리</th>
+            <th>순위</th><th>이름</th><th>카드점수</th><th>이번 게임</th><th>보유</th><th>승률</th>
           </tr>
         </thead>
         <tbody id="results-body"></tbody>
