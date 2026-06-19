@@ -22,12 +22,13 @@ function createGame(mode, players) {
     discardPile: [],
     combos: [],
     turnIndex: 0,
-    phase: 'draw', // draw | action | discard
+    phase: 'draw',
     drawnCard: null,
     thankYou: { active: false, lock: null, card: null, discarderCode: null },
     thankYouTaker: null,
     thankYouTakerCard: null,
     thankYouDisplacedTurnIndex: null,
+    thankYouDisplacedDiscarder: null,
     lastDeckDraw: false,
     timer: null,
     timerStart: null,
@@ -52,6 +53,7 @@ function getPublicState(game, viewerCode = null) {
       handCount: p.hand.length,
       hand: p.userCode === viewerCode ? p.hand : null,
       registered: p.registered,
+      avatar: p.avatar,
       singlePoints: p.userCode === viewerCode ? p.singlePoints : undefined,
       multiBalance: p.userCode === viewerCode ? p.multiBalance : undefined
     })),
@@ -240,6 +242,7 @@ function nextTurn(game, winnerCode = null) {
   game.thankYouTaker = null;
   game.thankYouTakerCard = null;
   game.thankYouDisplacedTurnIndex = null;
+  game.thankYouDisplacedDiscarder = null;
   game.lastDeckDraw = false;
 }
 
@@ -259,7 +262,8 @@ function confirmThankYou(game, playerCode) {
   const card = game.thankYou.card;
   player.hand.push(card);
 
-  game.thankYouDisplacedTurnIndex = game.turnIndex; // 원래 차례 플레이어 저장
+  game.thankYouDisplacedTurnIndex = game.turnIndex;
+  game.thankYouDisplacedDiscarder = game.thankYou.discarderCode;
   const playerIdx = game.players.findIndex(p => p.userCode === playerCode);
   game.turnIndex = playerIdx;
   game.phase = 'action';
@@ -275,11 +279,17 @@ function cancelConfirmedThankYou(game, playerCode) {
   if (game.thankYouTaker !== playerCode) return { ok: false };
   const player = game.players.find(p => p.userCode === playerCode);
   const card = game.thankYouTakerCard;
+  const discarderCode = game.thankYouDisplacedDiscarder;
+
   player.hand = player.hand.filter(c => c.id !== card.id);
-  game.discardPile.push(card);
+
+  // 카드를 다시 버린 더미 맨 위로 올리고 땡큐 재활성화
+  game.thankYou = { active: true, lock: null, card, discarderCode };
+
   game.thankYouTaker = null;
   game.thankYouTakerCard = null;
-  // 땡큐 전 원래 차례였던 플레이어로 복귀
+  game.thankYouDisplacedDiscarder = null;
+
   if (game.thankYouDisplacedTurnIndex != null) {
     game.turnIndex = game.thankYouDisplacedTurnIndex;
     game.thankYouDisplacedTurnIndex = null;

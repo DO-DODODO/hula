@@ -3,6 +3,17 @@ let me = null;
 let rankingData = null;
 let isAdmin = false;
 
+// ── Cookie Helpers ─────────────────────────────────────────────────────
+function setCookie(name, value, days = 365) {
+  const d = new Date();
+  d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
+}
+function getCookie(name) {
+  const v = document.cookie.match(`(?:^|; )${name}=([^;]*)`);
+  return v ? decodeURIComponent(v[1]) : null;
+}
+
 // ── Screen Navigation ──────────────────────────────────────────────────
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -20,12 +31,21 @@ document.getElementById('input-usercode').onkeydown = e => { if (e.key === 'Ente
 socket.on('loginSuccess', (user) => {
   me = user;
   isAdmin = user.isAdmin;
+  setCookie('userCode', user.userCode);
+  setCookie('userName', user.userName);
+  setCookie('isAdmin', user.isAdmin ? '1' : '0');
   updateMainScreen();
   showScreen('screen-main');
 });
 socket.on('loginError', (msg) => {
   document.getElementById('login-error').textContent = msg;
 });
+
+// 쿠키 자동 로그인
+const savedCode = getCookie('userCode');
+if (savedCode) {
+  socket.emit('login', { userCode: savedCode });
+}
 
 function updateMainScreen() {
   document.getElementById('main-username').textContent = me.userName;
@@ -35,10 +55,7 @@ function updateMainScreen() {
 
 // ── Single Mode ────────────────────────────────────────────────────────
 document.getElementById('btn-single').onclick = () => {
-  sessionStorage.setItem('gameMode', 'single');
-  sessionStorage.setItem('userCode', me.userCode);
-  sessionStorage.setItem('userName', me.userName);
-  sessionStorage.setItem('isAdmin', isAdmin ? '1' : '0');
+  setCookie('gameMode', 'single');
   location.href = 'game.html';
 };
 
@@ -78,10 +95,7 @@ socket.on('adminStartError', msg => {
 });
 
 socket.on('gameState', () => {
-  sessionStorage.setItem('gameMode', 'multi');
-  sessionStorage.setItem('userCode', me.userCode);
-  sessionStorage.setItem('userName', me.userName);
-  sessionStorage.setItem('isAdmin', isAdmin ? '1' : '0');
+  setCookie('gameMode', 'multi');
   location.href = 'game.html';
 });
 
@@ -91,10 +105,44 @@ document.getElementById('btn-leave-waiting').onclick = () => {
 };
 
 // ── Settings ───────────────────────────────────────────────────────────
+const AVATARS = [
+  { key: 'person', emoji: '👤' },
+  { key: 'cat',    emoji: '🐱' },
+  { key: 'bear',   emoji: '🐻' },
+  { key: 'rabbit', emoji: '🐰' },
+  { key: 'fox',    emoji: '🦊' },
+  { key: 'frog',   emoji: '🐸' },
+  { key: 'panda',  emoji: '🐼' },
+  { key: 'koala',  emoji: '🐨' },
+  { key: 'lion',   emoji: '🦁' },
+  { key: 'hedge',  emoji: '🦔' },
+  { key: 'wolf',   emoji: '🐺' },
+  { key: 'raccoon',emoji: '🦝' },
+  { key: 'cow',    emoji: '🐮' },
+];
+
+function renderAvatarGrid(currentAvatar) {
+  const grid = document.getElementById('avatar-grid');
+  if (!grid) return;
+  grid.innerHTML = AVATARS.map(a => `
+    <div class="avatar-item${a.key === currentAvatar ? ' selected' : ''}" data-key="${a.key}">
+      ${a.emoji}
+    </div>
+  `).join('');
+  grid.querySelectorAll('.avatar-item').forEach(el => {
+    el.onclick = () => {
+      grid.querySelectorAll('.avatar-item').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+      socket.emit('setAvatar', { avatar: el.dataset.key });
+    };
+  });
+}
+
 document.getElementById('btn-settings').onclick = () => {
   document.getElementById('input-win-message').value = me.winMessage || '';
   document.getElementById('single-points-display').textContent = `${me.singlePoints}점`;
   document.getElementById('multi-balance-display').textContent = `₩${me.multiBalance?.toLocaleString()}`;
+  renderAvatarGrid(me.avatar || 'person');
   if (isAdmin) {
     document.getElementById('admin-settings').style.display = '';
     document.getElementById('admin-login-area').style.display = 'none';
@@ -104,12 +152,16 @@ document.getElementById('btn-settings').onclick = () => {
 document.getElementById('btn-back-settings').onclick = () => showScreen('screen-main');
 
 document.getElementById('btn-save-message').onclick = () => {
-  const msg = document.getElementById('input-win-message').value.trim();
-  socket.emit('setWinMessage', { message: msg || '축하합니다!' });
+  const msg = document.getElementById('input-win-message').value.trim().slice(0, 20);
+  socket.emit('setWinMessage', { message: msg || '오예!' });
 };
 socket.on('winMessageSaved', () => {
   document.getElementById('settings-msg').textContent = '저장되었습니다.';
   setTimeout(() => document.getElementById('settings-msg').textContent = '', 2000);
+});
+
+socket.on('avatarSaved', ({ avatar }) => {
+  me.avatar = avatar;
 });
 
 document.getElementById('btn-charge-single').onclick = () => socket.emit('charge', { mode: 'single' });
@@ -186,6 +238,10 @@ socket.on('adminUsers', (users) => {
       <button onclick="deleteUser('${u.userCode}')" style="margin-left:auto;padding:2px 8px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">삭제</button>
     </div>
   `).join('');
+});
+socket.on('adminSaveUserError', (msg) => {
+  document.getElementById('settings-msg').textContent = msg;
+  setTimeout(() => document.getElementById('settings-msg').textContent = '', 3000);
 });
 window.deleteUser = (code) => {
   if (confirm(`${code} 삭제?`)) socket.emit('adminDeleteUser', { userCode: code });

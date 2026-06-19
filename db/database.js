@@ -15,7 +15,8 @@ async function init() {
       multiBalance INTEGER DEFAULT 1000000,
       lastSingleCharge INTEGER DEFAULT 0,
       lastMultiCharge INTEGER DEFAULT 0,
-      winMessage TEXT DEFAULT '축하합니다!',
+      winMessage TEXT DEFAULT '오예!',
+      avatar TEXT DEFAULT 'person',
       isAdmin INTEGER DEFAULT 0,
       singleWins INTEGER DEFAULT 0,
       singleGames INTEGER DEFAULT 0,
@@ -110,11 +111,17 @@ async function saveGameResult(gameId, mode, results) {
   }
 }
 
+async function getUserCount() {
+  const rows = await db.query(sql`SELECT COUNT(*) as cnt FROM users`);
+  return rows[0]?.cnt || 0;
+}
+
 async function getMultiRanking() {
   return db.query(sql`
     SELECT userCode, userName, multiBalance, multiWins, multiGames
     FROM users
     ORDER BY multiBalance DESC, multiWins DESC
+    LIMIT 20
   `);
 }
 
@@ -123,6 +130,7 @@ async function getSingleRanking() {
     SELECT userCode, userName, singlePoints, singleWins, singleGames
     FROM users
     ORDER BY singlePoints DESC, singleWins DESC
+    LIMIT 20
   `);
 }
 
@@ -150,5 +158,5 @@ async function chargeBalance(userCode, mode) {
 module.exports = {
   init, getUser, createUser, updateUser, getAllUsers, deleteUser,
   getSetting, setSetting, saveGameResult,
-  getMultiRanking, getSingleRanking, chargeBalance
+  getMultiRanking, getSingleRanking, chargeBalance, getUserCount
 };

@@ -11,6 +11,7 @@ const {
   calculateResults
 } = require('./game/gameEngine');
 const { decideDraw, decideActions, decideAttach, decideDiscard, isCardUseful } = require('./game/aiPlayer');
+const { getUserCount } = require('./db/database');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,6 +25,8 @@ let activeGame = null;
 const singleGames = new Map();
 let lastMultiGamePlayers = null;
 let lastMultiGameWinnerCode = null;
+const entryAttempts = new Map(); // socket.id → 시도 횟수
+const entryBlocked = new Set();  // socket.id → 차단
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -260,7 +263,7 @@ io.on('connection', (socket) => {
       userCode: user.userCode, userName: user.userName,
       isAdmin: user.isAdmin === 1,
       singlePoints: user.singlePoints, multiBalance: user.multiBalance,
-      winMessage: user.winMessage
+      winMessage: user.winMessage, avatar: user.avatar || 'person'
     });
   });
 
@@ -283,8 +286,13 @@ io.on('connection', (socket) => {
     const me = await db.getUser(sess.userCode);
     if (!me?.isAdmin) return;
     const existing = await db.getUser(userCode);
-    if (existing) await db.updateUser(userCode, { userName, isAdmin: isAdmin ? 1 : 0 });
-    else await db.createUser(userCode, userName, isAdmin ? 1 : 0);
+    if (existing) {
+      await db.updateUser(userCode, { userName, isAdmin: isAdmin ? 1 : 0 });
+    } else {
+      const count = await getUserCount();
+      if (count >= 20) { socket.emit('adminSaveUserError', '최대 20명까지 등록 가능합니다.'); return; }
+      await db.createUser(userCode, userName, isAdmin ? 1 : 0);
+    }
     socket.emit('adminUsers', await db.getAllUsers());
   });
 
@@ -303,14 +311,25 @@ io.on('connection', (socket) => {
     const me = await db.getUser(sess.userCode);
     if (!me?.isAdmin) return;
     await db.setSetting('entryCode', code);
+    // 코드 변경 시 입장 차단 및 시도 횟수 초기화
+    entryAttempts.clear();
+    entryBlocked.clear();
     socket.emit('adminSetEntryCodeResult', { ok: true });
   });
 
   socket.on('setWinMessage', async ({ message }) => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
-    await db.updateUser(sess.userCode, { winMessage: message || '축하합니다!' });
+    const msg = (message || '오예!').slice(0, 20);
+    await db.updateUser(sess.userCode, { winMessage: msg });
     socket.emit('winMessageSaved');
+  });
+
+  socket.on('setAvatar', async ({ avatar }) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    await db.updateUser(sess.userCode, { avatar });
+    socket.emit('avatarSaved', { avatar });
   });
 
   socket.on('charge', async ({ mode }) => {
@@ -328,10 +347,10 @@ io.on('connection', (socket) => {
     if (!user) return;
 
     const players = [
-      { userCode: user.userCode, userName: user.userName, isAI: false, singlePoints: user.singlePoints },
-      { userCode: 'AI_1', userName: 'AI 1', isAI: true },
-      { userCode: 'AI_2', userName: 'AI 2', isAI: true },
-      { userCode: 'AI_3', userName: 'AI 3', isAI: true }
+      { userCode: user.userCode, userName: user.userName, isAI: false, singlePoints: user.singlePoints, avatar: user.avatar || 'person' },
+      { userCode: 'AI_1', userName: '돼지', isAI: true, avatar: 'pig' },
+      { userCode: 'AI_2', userName: '강아지', isAI: true, avatar: 'dog' },
+      { userCode: 'AI_3', userName: '호랑이', isAI: true, avatar: 'tiger' }
     ].sort(() => Math.random() - 0.5);
 
     const game = createGame('single', players);
@@ -346,8 +365,23 @@ io.on('connection', (socket) => {
   socket.on('joinMulti', async ({ entryCode }) => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
+    if (entryBlocked.has(socket.id)) {
+      socket.emit('joinMultiError', '입장 코드 5회 초과. 코드 변경 후 다시 시도하세요.');
+      return;
+    }
     const stored = await db.getSetting('entryCode');
-    if (entryCode !== stored) { socket.emit('joinMultiError', '입장 코드가 틀렸습니다.'); return; }
+    if (entryCode !== stored) {
+      const cnt = (entryAttempts.get(socket.id) || 0) + 1;
+      entryAttempts.set(socket.id, cnt);
+      if (cnt >= 5) {
+        entryBlocked.add(socket.id);
+        socket.emit('joinMultiError', `입장 코드가 틀렸습니다. (${cnt}/5회 - 입장 차단)`);
+      } else {
+        socket.emit('joinMultiError', `입장 코드가 틀렸습니다. (${cnt}/5회)`);
+      }
+      return;
+    }
+    entryAttempts.delete(socket.id);
     const user = await db.getUser(sess.userCode);
     if (!user) return;
     if (user.multiBalance < 1000) { socket.emit('joinMultiError', '잔액이 1,000원 미만입니다.'); return; }
@@ -376,11 +410,14 @@ io.on('connection', (socket) => {
     const humanPlayers = [];
     for (const [uc] of waitingRoom) {
       const u = await db.getUser(uc);
-      humanPlayers.push({ userCode: u.userCode, userName: u.userName, isAI: false, multiBalance: u.multiBalance });
+      humanPlayers.push({ userCode: u.userCode, userName: u.userName, isAI: false, multiBalance: u.multiBalance, avatar: u.avatar || 'person' });
     }
+    const aiNames = ['돼지', '강아지', '호랑이'];
+    const aiAvatars = ['pig', 'dog', 'tiger'];
     const aiPlayers = [];
     for (let i = humanPlayers.length + 1; i <= 4; i++) {
-      aiPlayers.push({ userCode: `AI_${i}`, userName: `AI ${i}`, isAI: true });
+      const idx = i - 1;
+      aiPlayers.push({ userCode: `AI_${i}`, userName: aiNames[idx] || `AI${i}`, isAI: true, avatar: aiAvatars[idx] || 'pig' });
     }
 
     const allPlayers = [...humanPlayers, ...aiPlayers].sort(() => Math.random() - 0.5);
@@ -474,7 +511,10 @@ io.on('connection', (socket) => {
     const game = getPlayerGame(sess.userCode);
     if (!game) return;
     const result = tryThankYou(game, sess.userCode);
-    if (!result.ok) { socket.emit('actionError', result.msg); return; }
+    if (!result.ok) {
+      socket.emit('thankYouFailed', { msg: result.msg });
+      return;
+    }
     clearThankYouTimeout(game);
     confirmThankYou(game, sess.userCode);
     broadcastThankYouAnnounce(game, sess.userCode, sess.userName);
@@ -517,7 +557,33 @@ io.on('connection', (socket) => {
       if (!p.isAI) emitToPlayer(p.userCode, 'thankYouCancelled', { cancellerCode: sess.userCode, penalty, gain: unit });
     }
 
-    // advanceTurn 대신 복귀된 원래 차례 플레이어의 타이머 시작
+    // 재땡큐 가능: AI들에게 다시 땡큐 기회 부여
+    if (game.thankYou.active) {
+      const discarderCode = game.thankYou.discarderCode;
+      const card = game.thankYou.card;
+      const cur = getCurrentPlayer(game);
+      for (const p of game.players) {
+        if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
+        const useful = isCardUseful(card, p.hand);
+        const d = useful ? 3000 + Math.random() * 2000 : 5000 + Math.random() * 2000;
+        const doIt = useful ? Math.random() < 0.6 : Math.random() < 0.1;
+        if (doIt) {
+          setTimeout(() => {
+            if (!game.thankYou.active || game.thankYou.lock) return;
+            const r = tryThankYou(game, p.userCode);
+            if (r.ok) {
+              confirmThankYou(game, p.userCode);
+              broadcastThankYouAnnounce(game, p.userCode, p.userName);
+              broadcastGame(game);
+              startTimer(game);
+              setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+            }
+          }, d);
+        }
+      }
+    }
+
+    // 원래 차례 플레이어 타이머 시작
     const cur = getCurrentPlayer(game);
     startTimer(game);
     if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1000);

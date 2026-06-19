@@ -1,12 +1,26 @@
 const socket = io();
-const userCode = sessionStorage.getItem('userCode');
-const userName = sessionStorage.getItem('userName');
-const gameMode = sessionStorage.getItem('gameMode');
-const isAdmin = sessionStorage.getItem('isAdmin') === '1';
+
+function getCookie(name) {
+  const v = document.cookie.match(`(?:^|; )${name}=([^;]*)`);
+  return v ? decodeURIComponent(v[1]) : null;
+}
+
+const userCode = getCookie('userCode');
+const userName = getCookie('userName');
+const gameMode = getCookie('gameMode');
+const isAdmin  = getCookie('isAdmin') === '1';
 
 if (!userCode) location.href = '/';
 
+const AVATAR_MAP = {
+  person: '👤', cat: '🐱', bear: '🐻', rabbit: '🐰', fox: '🦊',
+  frog: '🐸', panda: '🐼', koala: '🐨', lion: '🦁', hedge: '🦔',
+  wolf: '🐺', raccoon: '🦝', cow: '🐮',
+  pig: '🐷', dog: '🐶', tiger: '🐯'
+};
+
 let gameState = null;
+let prevThankYouActive = false;
 let selectedCards = new Set();
 let timerInterval = null;
 let timerSeconds = 60;
@@ -14,7 +28,7 @@ let thankYouLocked = false;
 let attachMode = false;
 let myFixedSeat = null;
 let sortMode = null;
-let lastTurnPlayerCode = null; // 타이머 리셋 기준
+let lastTurnPlayerCode = null;
 
 // ── Init ───────────────────────────────────────────────────────────────
 socket.emit('login', { userCode });
@@ -34,14 +48,25 @@ if (isAdmin) {
 
 // ── Game State ─────────────────────────────────────────────────────────
 socket.on('gameState', (state) => {
-  // 새 게임 시작 시 결과 화면 숨기기
-  if (gameState && state.id !== gameState.id) {
+  // 새 게임 시작 시 결과 화면 숨기기 + 카드 배분 애니메이션
+  if (!gameState || state.id !== gameState.id) {
     document.getElementById('overlay-gameend').style.display = 'none';
     document.getElementById('overlay-results').style.display = 'none';
     selectedCards.clear();
     myFixedSeat = null;
     lastTurnPlayerCode = null;
+    prevThankYouActive = false;
+    if (state.id !== gameState?.id) showDealingAnimation();
   }
+  // 버린 더미 flip: 땡큐 창이 닫힐 때 (드로우로 덮임)
+  const newThankYouActive = !!state.thankYou?.active;
+  if (prevThankYouActive && !newThankYouActive && !state.thankYouTaker) {
+    const discardEl = document.getElementById('discard-card');
+    discardEl.classList.add('discard-flip');
+    setTimeout(() => discardEl.classList.remove('discard-flip'), 400);
+  }
+  prevThankYouActive = newThankYouActive;
+
   gameState = state;
   if (myFixedSeat === null) {
     const me = state.players.find(p => p.userCode === userCode);
@@ -101,7 +126,8 @@ function renderPlayer(pos, player) {
   const isCurrent = gameState.currentPlayerCode === player.userCode;
   el.classList.toggle('active', isCurrent);
 
-  el.querySelector('.player-name').textContent = player.userName + (player.isAI ? ' 🤖' : '');
+  const avatarEmoji = AVATAR_MAP[player.avatar] || (player.isAI ? '🤖' : '👤');
+  el.querySelector('.player-name').textContent = avatarEmoji + ' ' + player.userName;
   el.querySelector('.player-registered').textContent = player.registered ? '✓등록' : '';
 
   const cardsEl = el.querySelector('.player-cards');
@@ -127,7 +153,8 @@ function renderMyArea(me) {
   const isCurrent = gameState.currentPlayerCode === userCode && !gameState.thankYou?.active;
   const phase = gameState.phase;
 
-  document.getElementById('my-name').textContent = userName;
+  const myAvatar = AVATAR_MAP[me.avatar] || '👤';
+  document.getElementById('my-name').textContent = myAvatar + ' ' + userName;
   document.getElementById('my-balance').textContent = gameMode === 'multi'
     ? `₩${(me.multiBalance || 0).toLocaleString?.() || ''}` : `${me.singlePoints || 0}pt`;
   document.getElementById('my-registered').textContent = me.registered ? '✓등록' : '';
@@ -394,8 +421,19 @@ document.getElementById('btn-sort-suit').onclick = () => { sortMode = 'suit'; re
 document.getElementById('btn-sort-off').onclick = () => { sortMode = null; renderMyArea(gameState?.players.find(p => p.userCode === userCode)); };
 
 document.getElementById('btn-thankyou').onclick = () => {
+  const btn = document.getElementById('btn-thankyou');
+  if (btn.disabled) {
+    const state = gameState?.thankYou;
+    if (state?.lock) showNotif('이미 선점됐어요', 'info');
+    return;
+  }
   socket.emit('thankYou');
 };
+
+socket.on('thankYouFailed', ({ msg }) => {
+  if (msg?.includes('이미')) showNotif('다른 사람이 가져갔어요', 'info');
+  else showNotif(msg || '땡큐 실패', 'info');
+});
 
 document.getElementById('btn-cancel-thankyou').onclick = () => {
   if (confirm('취소하면 벌금이 부과됩니다. 취소하시겠습니까?')) {
@@ -466,7 +504,7 @@ socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage }) => {
     document.getElementById('win-message').textContent = winMessage;
   }
 
-  if (winnerCode === userCode) launchConfetti();
+  launchConfetti(winnerCode);
 
   document.getElementById('btn-gameend-ok').onclick = () => {
     overlay.style.display = 'none';
@@ -509,19 +547,45 @@ document.getElementById('btn-results-again').onclick = () => {
 };
 
 // ── Confetti ───────────────────────────────────────────────────────────
-function launchConfetti() {
+function launchConfetti(winnerCode) {
   const colors = ['#f1c40f', '#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22'];
   const container = document.getElementById('confetti-container');
   container.innerHTML = '';
+
+  // 1등 영역의 위치를 기준으로 꽃가루 생성
+  let originX = 50, originY = 50; // 기본: 화면 중앙 (%)
+  if (winnerCode === userCode) {
+    const el = document.getElementById('my-character');
+    if (el) {
+      const r = el.getBoundingClientRect();
+      originX = ((r.left + r.width / 2) / window.innerWidth) * 100;
+      originY = ((r.top + r.height / 2) / window.innerHeight) * 100;
+    }
+  } else if (gameState) {
+    const positions = ['top', 'left', 'right'];
+    const others = getOtherSeats(myFixedSeat);
+    others.forEach((p, i) => {
+      if (p?.userCode === winnerCode) {
+        const el = document.getElementById(`player-${positions[i]}`);
+        if (el) {
+          const r = el.getBoundingClientRect();
+          originX = ((r.left + r.width / 2) / window.innerWidth) * 100;
+          originY = ((r.top + r.height / 2) / window.innerHeight) * 100;
+        }
+      }
+    });
+  }
+
   for (let i = 0; i < 80; i++) {
     const piece = document.createElement('div');
     piece.className = 'confetti-piece';
+    const spread = 40;
     piece.style.cssText = `
-      left: ${Math.random() * 100}%;
-      top: -10px;
+      left: ${originX + (Math.random() - 0.5) * spread}%;
+      top: ${Math.max(0, originY - 10)}%;
       background: ${colors[Math.floor(Math.random() * colors.length)]};
       animation-duration: ${1.5 + Math.random() * 2}s;
-      animation-delay: ${Math.random() * 1}s;
+      animation-delay: ${Math.random() * 0.8}s;
       transform: rotate(${Math.random() * 360}deg);
     `;
     container.appendChild(piece);
@@ -575,6 +639,29 @@ function addLog(msg) {
   log.prepend(el);
   // 최대 20줄 유지
   while (log.children.length > 20) log.removeChild(log.lastChild);
+}
+
+// ── Dealing Animation ──────────────────────────────────────────────────
+function showDealingAnimation() {
+  const overlay = document.createElement('div');
+  overlay.id = 'dealing-overlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:500;display:flex;align-items:center;justify-content:center;';
+  const txt = document.createElement('div');
+  txt.style.cssText = 'color:#f0b90b;font-size:20px;font-weight:bold;letter-spacing:2px;';
+  txt.textContent = '카드 배분 중...';
+  overlay.appendChild(txt);
+  document.body.appendChild(overlay);
+  // 카드 배분 느낌으로 0.7초 간격으로 7번 깜빡
+  let cnt = 0;
+  const iv = setInterval(() => {
+    txt.style.opacity = cnt % 2 === 0 ? '0.4' : '1';
+    cnt++;
+    if (cnt > 14) {
+      clearInterval(iv);
+      overlay.remove();
+    }
+  }, 100);
+  setTimeout(() => overlay.remove(), 1500);
 }
 
 // ── Notifications ──────────────────────────────────────────────────────

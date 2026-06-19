@@ -347,6 +347,31 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 #results-table td { padding: 8px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
 #results-table tr:first-child td { color: var(--gold); }
 
+/* ── Discard Flip Animation ──────────────────────────────────────────── */
+@keyframes discardFlip {
+  0%   { transform: perspective(400px) rotateY(0deg); }
+  50%  { transform: perspective(400px) rotateY(90deg); opacity: 0.3; }
+  100% { transform: perspective(400px) rotateY(0deg); opacity: 1; }
+}
+.discard-flip { animation: discardFlip 0.4s ease forwards; }
+
+/* ── Avatar Grid ─────────────────────────────────────────────────────── */
+.avatar-grid {
+  display: flex; flex-wrap: wrap; gap: 8px; max-width: 240px;
+}
+.avatar-item {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,0.1); border: 2px solid transparent;
+  image-rendering: pixelated;
+}
+.avatar-item.selected {
+  border-color: var(--gold);
+  background: rgba(201,168,76,0.25);
+}
+.avatar-item:hover { background: rgba(255,255,255,0.2); }
+
 /* ── Attach Modal ────────────────────────────────────────────────────── */
 #attach-combo-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
 .attach-combo-item { display: flex; align-items: center; gap: 4px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; cursor: pointer; flex-wrap: wrap; }
