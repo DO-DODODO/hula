@@ -10,7 +10,8 @@ const {
   tryThankYou, confirmThankYou, cancelThankYou, cancelConfirmedThankYou, activateThankYou,
   calculateResults
 } = require('./game/gameEngine');
-const { decideDraw, decideActions, decideAttach, decideDiscard, isCardUseful } = require('./game/aiPlayer');
+const { decideDraw, decideActions, decideAttach, decideDiscard, isCardUseful, findCombos } = require('./game/aiPlayer');
+const { canAttach } = require('./game/cardUtils');
 const { getUserCount } = require('./db/database');
 
 const app = express();
@@ -66,6 +67,56 @@ function handleTimeout(game) {
   const player = getCurrentPlayer(game);
   if (!player || player.isAI) return;
 
+  // 땡큐 테이커가 시간 초과 → 자동 취소 + 벌금
+  if (game.thankYouTaker === player.userCode) {
+    const takerCode = player.userCode;
+    const result = cancelConfirmedThankYou(game, takerCode);
+    if (!result.ok) return;
+
+    const unit = game.mode === 'multi' ? 100 : 1;
+    const others = game.players.filter(p => p.userCode !== takerCode);
+    const penalty = unit * others.length;
+
+    for (const p of game.players) {
+      if (!p.isAI) emitToPlayer(p.userCode, 'thankYouCancelled', { cancellerCode: takerCode, penalty, gain: unit, auto: true });
+    }
+
+    setTimeout(() => {
+      broadcastGame(game);
+      if (game.thankYou.active) {
+        const discarderCode = game.thankYou.discarderCode;
+        const card = game.thankYou.card;
+        const cur = getCurrentPlayer(game);
+        for (const p of game.players) {
+          if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
+          const useful = isCardUseful(card, p.hand);
+          const d = useful ? 3000 + Math.random() * 2000 : 5000 + Math.random() * 2000;
+          if (useful ? Math.random() < 0.6 : Math.random() < 0.1) {
+            setTimeout(() => {
+              if (!game.thankYou.active || game.thankYou.lock) return;
+              const r = tryThankYou(game, p.userCode);
+              if (r.ok) {
+                const cty = confirmThankYou(game, p.userCode);
+                broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
+                broadcastGame(game);
+                startTimer(game);
+                setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+              }
+            }, d);
+          }
+        }
+        if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1000);
+      }
+    }, 1200);
+
+    // 정산 때 반영 (pendingChanges에 기록)
+    game.pendingChanges[takerCode] = (game.pendingChanges[takerCode] || 0) - penalty;
+    for (const p of others) {
+      if (!p.isAI) game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
+    }
+    return;
+  }
+
   const result = autoTimeout(game);
   if (result.deckEmpty) { endGame(game, null); return; }
 
@@ -101,8 +152,8 @@ function activateThankYouWindow(game, card) {
         if (!game.thankYou.active || game.thankYou.lock) return;
         const r = tryThankYou(game, p.userCode);
         if (r.ok) {
-          confirmThankYou(game, p.userCode);
-          broadcastThankYouAnnounce(game, p.userCode, p.userName);
+          const cty = confirmThankYou(game, p.userCode);
+          broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
           broadcastGame(game);
           startTimer(game);
           setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
@@ -144,8 +195,8 @@ async function runAITurn(game, aiPlayer) {
   if (getCurrentPlayer(game)?.userCode !== aiPlayer.userCode) return;
 
   if (game.phase === 'draw') {
-    // 땡큐 활성 중이면 현재 플레이어는 덱에서만 드로우 가능
-    const discardTop = game.thankYou.active ? null :
+    // 땡큐 활성 중이거나 버린더미 hidden이면 덱에서만 드로우 가능
+    const discardTop = (game.thankYou.active || game.discardPileHidden) ? null :
       (game.discardPile.length > 0 ? game.discardPile[game.discardPile.length - 1] : null);
     const drawSrc = (!game.firstTurn && discardTop && decideDraw(aiPlayer.hand, discardTop) === 'discard') ? 'discard' : 'deck';
 
@@ -154,10 +205,74 @@ async function runAITurn(game, aiPlayer) {
     broadcastLog(game, `${aiPlayer.userName} 생각 중...`);
     await sleep(500 + Math.random() * 500);
 
-    drawCard(game, aiPlayer.userCode, drawSrc);
+    // 생각 중 사이에 다른 사람이 땡큐해서 턴이 바뀌었으면 종료
+    if (getCurrentPlayer(game)?.userCode !== aiPlayer.userCode) return;
+
+    const dr0 = drawCard(game, aiPlayer.userCode, drawSrc);
+    if (!dr0.ok) return;
     broadcastLog(game, `${aiPlayer.userName} ${drawSrc === 'discard' ? '버린 더미' : '카드 더미'}에서 드로우`);
     broadcastGame(game);
+    if (game.lastDeckDraw) {
+      for (const p of game.players) {
+        if (!p.isAI) emitToPlayer(p.userCode, 'deckEmpty', {});
+      }
+    }
     await sleep(500 + Math.random() * 500);
+  }
+
+  // 땡큐 테이커: 가져온 카드를 반드시 먼저 사용
+  if (game.thankYouTaker === aiPlayer.userCode && game.thankYouTakerCard) {
+    const takerCard = game.thankYouTakerCard;
+    if (aiPlayer.hand.some(c => c.id === takerCard.id)) {
+      // 1. 땡큐 카드 포함한 조합 등록 시도
+      const combos = findCombos(aiPlayer.hand);
+      const comboWithCard = combos.find(cb => cb.cards.some(c => c.id === takerCard.id));
+      if (comboWithCard) {
+        const r = registerCards(game, aiPlayer.userCode, comboWithCard.cards.map(c => c.id));
+        broadcastLog(game, `${aiPlayer.userName} 조합 등록!`);
+        if (r.win) { endGame(game, aiPlayer.userCode); return; }
+        broadcastGame(game);
+        await sleep(500);
+      } else {
+        // 2. 기존 조합에 붙이기 시도
+        let attached = false;
+        for (const combo of game.combos) {
+          if (canAttach(combo, takerCard)) {
+            const r = attachCards(game, aiPlayer.userCode, [takerCard.id], combo.id);
+            if (r.ok) {
+              broadcastLog(game, `${aiPlayer.userName} 카드 붙이기`);
+              if (r.win) { endGame(game, aiPlayer.userCode); return; }
+              broadcastGame(game);
+              await sleep(400);
+              attached = true;
+              break;
+            }
+          }
+        }
+        if (!attached) {
+          // 3. 못 쓰면 자동 취소 + 벌금
+          const cres = cancelConfirmedThankYou(game, aiPlayer.userCode);
+          if (cres.ok) {
+            const unit = game.mode === 'multi' ? 100 : 1;
+            const others = game.players.filter(p => p.userCode !== aiPlayer.userCode);
+            const penalty = unit * others.length;
+            game.pendingChanges[aiPlayer.userCode] = (game.pendingChanges[aiPlayer.userCode] || 0) - penalty;
+            for (const p of others) {
+              if (!p.isAI) game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
+            }
+            broadcastLog(game, `${aiPlayer.userName} 땡큐 취소 (벌금 부과)`);
+            setTimeout(() => {
+              broadcastGame(game);
+              if (game.thankYou.active) {
+                const cur = getCurrentPlayer(game);
+                if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1000);
+              }
+            }, 1200);
+          }
+          return;
+        }
+      }
+    }
   }
 
   const actions = decideActions(aiPlayer.hand, game.combos, aiPlayer.registered);
@@ -203,7 +318,11 @@ function broadcastLog(game, message) {
   }
 }
 
-function broadcastThankYouAnnounce(game, playerCode, playerName) {
+function broadcastThankYouAnnounce(game, playerCode, playerName, card) {
+  const suitKo = { S: '스페이드', H: '하트', D: '다이아', C: '클로버' }[card?.suit] || '';
+  const valStr = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' }[card?.value] || String(card?.value || '');
+  const cardStr = card ? `${valStr}(${suitKo})` : '';
+  broadcastLog(game, `${playerName}가 땡큐해서 카드 ${cardStr} 가져감`);
   for (const p of game.players) {
     if (!p.isAI) emitToPlayer(p.userCode, 'thankYouAnnounce', { playerCode, playerName });
   }
@@ -224,6 +343,7 @@ async function endGame(game, winnerCode) {
     if (!r.isAI) {
       const user = await db.getUser(r.userCode);
       r.currentBalance = game.mode === 'multi' ? user?.multiBalance : user?.singlePoints;
+      r.totalWins = game.mode === 'multi' ? (user?.multiWins ?? 0) : (user?.singleWins ?? 0);
     }
   }
 
@@ -346,12 +466,24 @@ io.on('connection', (socket) => {
     const user = await db.getUser(sess.userCode);
     if (!user) return;
 
-    const players = [
-      { userCode: user.userCode, userName: user.userName, isAI: false, singlePoints: user.singlePoints, avatar: user.avatar || 'person' },
+    // 기존 게임이 있으면 타이머·상태 정리 후 교체
+    const prev = singleGames.get(socket.id);
+    if (prev) {
+      clearTimer(prev);
+      clearThankYouTimeout(prev);
+      prev.status = 'ended';
+      singleGames.delete(socket.id);
+    }
+
+    const aiPlayers = [
       { userCode: 'AI_1', userName: '돼지', isAI: true, avatar: 'pig' },
       { userCode: 'AI_2', userName: '강아지', isAI: true, avatar: 'dog' },
       { userCode: 'AI_3', userName: '호랑이', isAI: true, avatar: 'tiger' }
     ].sort(() => Math.random() - 0.5);
+    const players = [
+      { userCode: user.userCode, userName: user.userName, isAI: false, singlePoints: user.singlePoints, avatar: user.avatar || 'person' },
+      ...aiPlayers
+    ];
 
     const game = createGame('single', players);
     singleGames.set(socket.id, game);
@@ -457,6 +589,11 @@ io.on('connection', (socket) => {
     const result = drawCard(game, sess.userCode, source);
     if (!result.ok) { socket.emit('actionError', result.msg); return; }
     broadcastGame(game);
+    if (game.lastDeckDraw) {
+      for (const p of game.players) {
+        if (!p.isAI) emitToPlayer(p.userCode, 'deckEmpty', {});
+      }
+    }
   });
 
   socket.on('register', ({ cardIds }) => {
@@ -516,8 +653,8 @@ io.on('connection', (socket) => {
       return;
     }
     clearThankYouTimeout(game);
-    confirmThankYou(game, sess.userCode);
-    broadcastThankYouAnnounce(game, sess.userCode, sess.userName);
+    const cty = confirmThankYou(game, sess.userCode);
+    broadcastThankYouAnnounce(game, sess.userCode, sess.userName, cty.card);
     broadcastGame(game);
     startTimer(game);
   });
@@ -532,29 +669,22 @@ io.on('connection', (socket) => {
     const result = cancelConfirmedThankYou(game, sess.userCode);
     if (!result.ok) return;
 
-    broadcastGame(game);
-
     const unit = game.mode === 'multi' ? 100 : 1;
     const others = game.players.filter(p => p.userCode !== sess.userCode);
     const penalty = unit * others.length;
 
-    const me = await db.getUser(sess.userCode);
-    if (me) {
-      const key = game.mode === 'multi' ? 'multiBalance' : 'singlePoints';
-      await db.updateUser(sess.userCode, { [key]: Math.max(0, me[key] - penalty) });
-    }
-    for (const p of others) {
-      if (!p.isAI) {
-        const u = await db.getUser(p.userCode);
-        if (u) {
-          const key = game.mode === 'multi' ? 'multiBalance' : 'singlePoints';
-          await db.updateUser(p.userCode, { [key]: u[key] + unit });
-        }
-      }
-    }
-
+    // 1. 벌금 알림 먼저
     for (const p of game.players) {
       if (!p.isAI) emitToPlayer(p.userCode, 'thankYouCancelled', { cancellerCode: sess.userCode, penalty, gain: unit });
+    }
+
+    // 2. 카드/차례 변경은 잠깐 후에 (알림이 먼저 보이도록)
+    setTimeout(() => broadcastGame(game), 1200);
+
+    // 3. 정산 때 반영 (pendingChanges에 기록)
+    game.pendingChanges[sess.userCode] = (game.pendingChanges[sess.userCode] || 0) - penalty;
+    for (const p of others) {
+      if (!p.isAI) game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
     }
 
     // 재땡큐 가능: AI들에게 다시 땡큐 기회 부여
@@ -572,8 +702,8 @@ io.on('connection', (socket) => {
             if (!game.thankYou.active || game.thankYou.lock) return;
             const r = tryThankYou(game, p.userCode);
             if (r.ok) {
-              confirmThankYou(game, p.userCode);
-              broadcastThankYouAnnounce(game, p.userCode, p.userName);
+              const cty = confirmThankYou(game, p.userCode);
+              broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
               broadcastGame(game);
               startTimer(game);
               setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);

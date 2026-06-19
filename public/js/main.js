@@ -156,6 +156,7 @@ document.getElementById('btn-save-message').onclick = () => {
   socket.emit('setWinMessage', { message: msg || '오예!' });
 };
 socket.on('winMessageSaved', () => {
+  me.winMessage = document.getElementById('input-win-message').value.trim() || '오예!';
   document.getElementById('settings-msg').textContent = '저장되었습니다.';
   setTimeout(() => document.getElementById('settings-msg').textContent = '', 2000);
 });

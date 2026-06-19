@@ -64,7 +64,8 @@ function isValidSet(cards) {
 }
 
 function isValidSequence(cards) {
-  if (cards.length < 3) return false;
+  const minLen = cards.some(c => c.value === 7) ? 2 : 3;
+  if (cards.length < minLen) return false;
   const suit = cards[0].suit;
   if (!cards.every(c => c.suit === suit)) return false;
   const values = cards.map(c => c.value);

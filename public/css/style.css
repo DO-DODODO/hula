@@ -123,19 +123,28 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .pile-label { font-size: 10px; color: var(--text-dim); }
 
 /* ── Cards ───────────────────────────────────────────────────────────── */
+/* 터치 타깃 래퍼 - 선택해도 위치 안 변함 */
+.card-slot {
+  width: clamp(44px, 5vw, 70px);
+  height: clamp(62px, 7vw, 98px);
+  cursor: pointer; position: relative;
+  flex-shrink: 0; user-select: none;
+}
+.card-slot.selected { z-index: 2; }
+.card-slot.selected .card { transform: translateY(-14px); box-shadow: 0 6px 16px rgba(255,215,0,0.9); border-color: gold; border-width: 2px; }
+
 .card {
   width: clamp(44px, 5vw, 70px);
   height: clamp(62px, 7vw, 98px);
   border-radius: 6px; border: 1px solid #ccc;
   background: #fff; display: flex; align-items: center; justify-content: center;
-  font-size: clamp(11px, 1.2vw, 16px); font-weight: bold; cursor: pointer; position: relative;
+  font-size: clamp(11px, 1.2vw, 16px); font-weight: bold; position: relative;
   flex-shrink: 0; user-select: none;
   box-shadow: 1px 1px 4px rgba(0,0,0,0.4);
 }
 .card.red { color: var(--card-red); }
 .card.black { color: var(--card-black); }
 .card.card-back { background: linear-gradient(135deg, #1a3a6b 0%, #2d5fa6 100%); border-color: #1a3a6b; }
-.card.selected { transform: translateY(-14px); box-shadow: 0 6px 16px rgba(255,215,0,0.9); border-color: gold; border-width: 2px; position: relative; z-index: 2; }
 .card.small { width: clamp(32px, 3.5vw, 52px); height: clamp(46px, 5vw, 72px); font-size: clamp(9px, 1vw, 13px); }
 .card.tiny { width: clamp(24px, 2.5vw, 38px); height: clamp(34px, 3.5vw, 54px); font-size: clamp(8px, 0.8vw, 11px); }
 
@@ -228,8 +237,8 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 #my-hand-area { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 #my-hand { display: flex; align-items: flex-end; overflow-x: auto; overflow-y: visible; padding-top: 20px; padding-bottom: 4px; min-height: 62px; }
-#my-hand .card { margin-left: -8px; }
-#my-hand .card:first-child { margin-left: 0; }
+#my-hand .card-slot { margin-left: -8px; }
+#my-hand .card-slot:first-child { margin-left: 0; }
 
 #action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn-action { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: bold; background: rgba(255,255,255,0.2); color: #fff; }
@@ -303,9 +312,9 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 /* ── Game Log ─────────────────────────────────────────────────────────── */
 #game-log {
-  position: absolute; bottom: 38%; right: 8px;
+  position: absolute; bottom: 30%; right: 8px;
   width: clamp(140px, 16vw, 220px);
-  max-height: 120px; overflow-y: auto;
+  max-height: 100px; overflow-y: auto;
   display: flex; flex-direction: column-reverse; gap: 3px;
   pointer-events: none;
 }

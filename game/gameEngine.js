@@ -30,6 +30,8 @@ function createGame(mode, players) {
     thankYouDisplacedTurnIndex: null,
     thankYouDisplacedDiscarder: null,
     lastDeckDraw: false,
+    discardPileHidden: false,
+    pendingChanges: {},
     timer: null,
     timerStart: null,
     firstTurn: true
@@ -63,9 +65,12 @@ function getPublicState(game, viewerCode = null) {
       if (game.thankYou.active && game.thankYou.card) {
         return { top: game.thankYou.card, count: game.discardPile.length + 1 };
       }
-      return game.discardPile.length > 0
-        ? { top: game.discardPile[game.discardPile.length - 1], count: game.discardPile.length }
-        : null;
+      if (game.discardPile.length > 0) {
+        return game.discardPileHidden
+          ? { top: null, count: game.discardPile.length, hidden: true }
+          : { top: game.discardPile[game.discardPile.length - 1], count: game.discardPile.length };
+      }
+      return null;
     })(),
     combos: game.combos,
     turnIndex: game.turnIndex,
@@ -93,6 +98,7 @@ function drawCard(game, playerCode, source) {
   if (source === 'deck' && game.thankYou.active && !game.thankYou.lock) {
     game.discardPile.push(game.thankYou.card);
     game.thankYou = { active: false, lock: null, card: null };
+    game.discardPileHidden = true;
   }
 
   let card;
@@ -178,6 +184,13 @@ function discardCard(game, playerCode, cardId) {
   const card = player.hand.find(c => c.id === cardId);
   if (!card) return { ok: false, msg: '카드를 찾을 수 없습니다' };
 
+  // 땡큐 테이커는 땡큐 카드를 먼저 사용해야 버릴 수 있음
+  if (game.thankYouTaker === playerCode && game.thankYouTakerCard) {
+    if (player.hand.some(c => c.id === game.thankYouTakerCard.id)) {
+      return { ok: false, msg: '땡큐 카드를 먼저 사용하거나 취소 버튼을 누르세요' };
+    }
+  }
+
   player.hand = player.hand.filter(c => c.id !== cardId);
   game.firstTurn = false;
   game.drawnCard = null;
@@ -189,6 +202,7 @@ function discardCard(game, playerCode, cardId) {
     return { ok: true, card, win: true };
   }
 
+  game.discardPileHidden = false;
   game.discardPile.push(card);
   game.phase = 'draw';
   return { ok: true, card };
@@ -203,6 +217,7 @@ function autoTimeout(game) {
   if (game.thankYou.active && !game.thankYou.lock) {
     game.discardPile.push(game.thankYou.card);
     game.thankYou = { active: false, lock: null, card: null, discarderCode: null };
+    game.discardPileHidden = true;
   }
 
   if (game.phase === 'draw') {
@@ -221,6 +236,7 @@ function autoTimeout(game) {
   // discard min value card
   const minCard = player.hand.reduce((min, c) => c.value < min.value ? c : min, player.hand[0]);
   player.hand = player.hand.filter(c => c.id !== minCard.id);
+  game.discardPileHidden = false;
   game.discardPile.push(minCard);
   game.firstTurn = false;
   game.phase = 'draw';
@@ -270,6 +286,7 @@ function confirmThankYou(game, playerCode) {
   game.thankYouTaker = playerCode;
   game.thankYouTakerCard = card;
   game.thankYou = { active: false, lock: null, card: null, discarderCode: null };
+  game.discardPileHidden = true;
 
   return { ok: true, card };
 }
@@ -370,7 +387,6 @@ function calculateResults(game, winnerCode = null) {
   // Calculate payments
   for (const r of results) {
     if (r.rank === 1) {
-      // Winner collects from each loser
       let total = 0;
       for (const loser of results.filter(l => l.rank !== 1)) {
         const multiplier = loser.registered ? 1 : 2;
@@ -381,6 +397,10 @@ function calculateResults(game, winnerCode = null) {
       const multiplier = r.registered ? 1 : 2;
       r.pointChange = -(r.cardSum * unit * multiplier);
     }
+    // 땡큐 취소 벌금/보상 합산
+    if (game.pendingChanges[r.userCode]) {
+      r.pointChange += game.pendingChanges[r.userCode];
+    }
   }
 
   return results;
@@ -390,6 +410,6 @@ module.exports = {
   createGame, getCurrentPlayer, getPublicState,
   drawCard, registerCards, attachCards, discardCard,
   autoTimeout, nextTurn,
-  tryThankYou, confirmThankYou, cancelThankYou, activateThankYou,
+  tryThankYou, confirmThankYou, cancelThankYou, cancelConfirmedThankYou, activateThankYou, // 이 부분 추가
   calculateResults
 };

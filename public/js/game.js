@@ -91,6 +91,7 @@ socket.on('canStop', () => {
 });
 
 socket.on('actionError', (msg) => showNotif(msg, 'info'));
+socket.on('deckEmpty', () => showNotif('카드 덱이 소진됐습니다! 이번 버림 후 카드 합산으로 순위 결정', 'info'));
 
 // ── Render ─────────────────────────────────────────────────────────────
 function render() {
@@ -167,7 +168,7 @@ function renderMyArea(me) {
   const hand = getSortedHand(rawHand);
   const handEl = document.getElementById('my-hand');
 
-  const currentIds = [...handEl.querySelectorAll('.card[data-card-id]')]
+  const currentIds = [...handEl.querySelectorAll('.card-slot[data-card-id]')]
     .filter(el => !el.classList.contains('card-leaving'))
     .map(el => el.dataset.cardId);
   const newIds = hand.map(c => c.id);
@@ -184,7 +185,7 @@ function renderMyArea(me) {
       handEl.appendChild(el);
     }
   } else {
-    handEl.querySelectorAll('.card[data-card-id]').forEach(el => {
+    handEl.querySelectorAll('.card-slot[data-card-id]').forEach(el => {
       el.classList.toggle('selected', selectedCards.has(el.dataset.cardId));
     });
   }
@@ -199,19 +200,24 @@ function renderCenter() {
   const discardEl = document.getElementById('discard-card');
   const discardPile = gameState.discardPile;
   if (discardPile) {
-    const prevTopId = discardEl.dataset.topId;
-    const newTopId = discardPile.top?.id;
-    // 땡큐로 카드 가져간 후: 이전 카드 회색 처리
-    const isOldCard = !!gameState.thankYouTaker;
-    discardEl.innerHTML = '';
-    discardEl.className = 'card ' + getCardColorClass(discardPile.top) + (isOldCard ? ' discard-old' : '');
-    discardEl.dataset.topId = newTopId;
-    discardEl.appendChild(cardInnerEl(discardPile.top));
-    if (prevTopId !== newTopId) {
-      discardEl.classList.add('discard-pop');
-      setTimeout(() => discardEl.classList.remove('discard-pop'), 400);
+    if (discardPile.hidden) {
+      discardEl.innerHTML = '';
+      discardEl.className = 'card card-back';
+      discardEl.dataset.topId = '';
+      discardEl.onclick = null;
+    } else {
+      const prevTopId = discardEl.dataset.topId;
+      const newTopId = discardPile.top?.id;
+      discardEl.innerHTML = '';
+      discardEl.className = 'card ' + getCardColorClass(discardPile.top);
+      discardEl.dataset.topId = newTopId;
+      discardEl.appendChild(cardInnerEl(discardPile.top));
+      if (prevTopId !== newTopId) {
+        discardEl.classList.add('discard-pop');
+        setTimeout(() => discardEl.classList.remove('discard-pop'), 400);
+      }
+      discardEl.onclick = () => handleDraw('discard');
     }
-    discardEl.onclick = () => handleDraw('discard');
   } else {
     discardEl.innerHTML = '';
     discardEl.className = 'card';
@@ -227,7 +233,7 @@ function renderCenter() {
   document.getElementById('deck-pile').classList.toggle('my-turn-highlight', drawPhase);
   // 버린더미는 땡큐 활성 중 차단
   document.getElementById('discard-pile').classList.toggle('my-turn-highlight',
-    drawPhase && !!gameState.discardPile && !gameState.firstTurn && !gameState.thankYou?.active);
+    drawPhase && !!gameState.discardPile && !gameState.discardPile.hidden && !gameState.firstTurn && !gameState.thankYou?.active);
 
   // Thank you button
   const btn = document.getElementById('btn-thankyou');
@@ -291,11 +297,14 @@ function renderCombos() {
 }
 
 function createCardEl(card, size = '') {
+  const slot = document.createElement('div');
+  slot.className = 'card-slot';
+  slot.dataset.cardId = card.id;
   const el = document.createElement('div');
   el.className = `card ${getCardColorClass(card)}${size ? ' ' + size : ''}`;
-  el.dataset.cardId = card.id;
   el.appendChild(cardInnerEl(card));
-  return el;
+  slot.appendChild(el);
+  return slot;
 }
 
 function cardInnerEl(card) {
@@ -436,18 +445,32 @@ socket.on('thankYouFailed', ({ msg }) => {
 });
 
 document.getElementById('btn-cancel-thankyou').onclick = () => {
-  if (confirm('취소하면 벌금이 부과됩니다. 취소하시겠습니까?')) {
-    socket.emit('cancelThankYou');
-  }
+  document.getElementById('modal-cancel-confirm').style.display = 'flex';
+};
+document.getElementById('btn-cancel-confirm-no').onclick = () => {
+  document.getElementById('modal-cancel-confirm').style.display = 'none';
+};
+document.getElementById('btn-cancel-confirm-yes').onclick = () => {
+  document.getElementById('modal-cancel-confirm').style.display = 'none';
+  socket.emit('cancelThankYou');
 };
 
-socket.on('thankYouCancelled', ({ cancellerCode, penalty, gain }) => {
+socket.on('thankYouCancelled', ({ cancellerCode, penalty, gain, auto }) => {
   if (cancellerCode === userCode) {
-    showNotif(`-${penalty.toLocaleString()}`, 'lose-money');
+    if (auto) {
+      document.getElementById('auto-cancel-penalty').textContent = `-${penalty.toLocaleString()}원`;
+      document.getElementById('modal-auto-cancel').style.display = 'flex';
+    } else {
+      showNotif(`벌금 -${penalty.toLocaleString()}원 부과`, 'lose-money');
+    }
   } else {
-    showNotif(`+${gain.toLocaleString()}`, 'win-money');
+    showNotif(`+${gain.toLocaleString()}원 지급`, 'win-money');
   }
 });
+document.getElementById('btn-auto-cancel-ok').onclick = () => {
+  document.getElementById('modal-auto-cancel').style.display = 'none';
+};
+
 
 function updateActionButtons(me) {
   if (!me) return;
@@ -457,7 +480,8 @@ function updateActionButtons(me) {
 
   document.getElementById('btn-register').disabled = !isTurn || phase !== 'action' || !hasSelected;
   document.getElementById('btn-attach').disabled = !isTurn || phase !== 'action' || !hasSelected || !me.registered;
-  document.getElementById('btn-discard').disabled = !isTurn || phase !== 'action' || selectedCards.size !== 1;
+  const isThankYouTaker = gameState?.thankYouTaker === userCode;
+  document.getElementById('btn-discard').disabled = !isTurn || phase !== 'action' || selectedCards.size !== 1 || isThankYouTaker;
 }
 
 // ── Timer ──────────────────────────────────────────────────────────────
@@ -526,7 +550,7 @@ function showResults(results) {
         ${r.pointChange >= 0 ? '+' : ''}${r.pointChange?.toLocaleString()}${gameMode === 'multi' ? '원' : 'pt'}
       </td>
       <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance + 'pt') : '-'}</td>
-      <td>-</td>
+      <td>${r.totalWins !== undefined ? r.totalWins + '승' : '-'}</td>
     </tr>`).join('');
 }
 
@@ -535,6 +559,7 @@ document.getElementById('btn-results-home').onclick = () => { location.href = '/
 document.getElementById('btn-results-again').onclick = () => {
   document.getElementById('overlay-results').style.display = 'none';
   document.getElementById('overlay-gameend').style.display = 'none';
+  document.getElementById('game-log').innerHTML = '';
   gameState = null;
   selectedCards.clear();
   myFixedSeat = null;
