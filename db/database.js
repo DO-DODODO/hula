@@ -5,7 +5,8 @@ const path = require('path');
 let db;
 
 async function init() {
-  db = createDb(path.join(__dirname, 'hula.db'));
+  const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'hula.db');
+  db = createDb(dbPath);
 
   await db.query(sql`
     CREATE TABLE IF NOT EXISTS users (

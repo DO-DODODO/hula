@@ -122,7 +122,7 @@ function decideAttach(hand, allCombos, playerRegistered) {
 }
 
 function decideDiscard(hand) {
-  // Discard highest value card that's not part of any potential combo
+  if (hand.length === 0) return null;
   const combos = findCombos(hand);
   const usedIds = new Set(combos.flatMap(c => c.cards.map(x => x.id)));
   const useless = hand.filter(c => !usedIds.has(c.id));

@@ -31,6 +31,10 @@ let sortMode = null;
 let lastTurnPlayerCode = null;
 let lastDrawSource = null; // 'deck' | 'discard' | 'thankYou'
 let prevHandCounts = new Map(); // userCode → handCount
+let lastDiscardCardData = null; // 버린더미 hidden 시 흐릿하게 보여줄 마지막 카드
+let markedCardId = null; // 점 표시할 카드 ID
+let markedCardSource = null; // 'deck' | 'thankYou'
+let pendingThankYouPlayerCode = null; // 땡큐한 플레이어 (카드 날아오는 방향용)
 
 // ── Init ───────────────────────────────────────────────────────────────
 // connect는 최초 연결 + 재연결 모두 발생하므로 여기서 login 전송
@@ -65,15 +69,13 @@ socket.on('gameState', (state) => {
     prevThankYouActive = false;
     prevComboTotal = 0;
     prevHandCounts.clear();
+    lastDiscardCardData = null;
+    markedCardId = null;
+    markedCardSource = null;
+    pendingThankYouPlayerCode = null;
     if (state.id !== gameState?.id) showDealingAnimation();
   }
-  // 버린 더미 flip: 땡큐 창이 닫힐 때 (드로우로 덮임)
   const newThankYouActive = !!state.thankYou?.active;
-  if (prevThankYouActive && !newThankYouActive && !state.thankYouTaker) {
-    const discardEl = document.getElementById('discard-card');
-    discardEl.classList.add('discard-flip');
-    setTimeout(() => discardEl.classList.remove('discard-flip'), 400);
-  }
   prevThankYouActive = newThankYouActive;
 
   gameState = state;
@@ -86,6 +88,9 @@ socket.on('gameState', (state) => {
   if (turnChanged) {
     lastTurnPlayerCode = state.currentPlayerCode;
     updateTimer();
+    markedCardId = null;
+    markedCardSource = null;
+    if (state.currentPlayerCode !== userCode) selectedCards.clear();
   }
   render();
 });
@@ -145,7 +150,11 @@ function renderPlayer(pos, player, comboGrew = false) {
   // 상대방 카드 수 변화 감지 → 모션
   const prevCount = prevHandCounts.get(player.userCode) ?? player.handCount;
   if (player.handCount > prevCount) {
-    flyCard(document.getElementById('deck-card'), el);
+    const fromEl = pendingThankYouPlayerCode === player.userCode
+      ? document.getElementById('discard-card')
+      : document.getElementById('deck-card');
+    pendingThankYouPlayerCode = null;
+    flyCard(fromEl, el);
   } else if (player.handCount < prevCount) {
     // 등록/붙이기면 가운데(콤보 영역)로, 버리기면 버린더미로
     const toEl = comboGrew
@@ -204,17 +213,35 @@ function renderMyArea(me) {
 
   if (handChanged) {
     const addedIds = new Set(newIds.filter(id => !currentIds.includes(id)));
+    // 새 카드가 1장 들어왔고 출처가 있으면 점 마킹
+    if (addedIds.size === 1 && lastDrawSource) {
+      markedCardId = [...addedIds][0];
+      markedCardSource = lastDrawSource;
+      lastDrawSource = null;
+    }
     handEl.innerHTML = '';
     for (const card of hand) {
       const el = createCardEl(card);
       el.onclick = () => toggleCardSelect(card.id, el);
       if (selectedCards.has(card.id)) el.classList.add('selected');
       if (addedIds.has(card.id)) el.classList.add('card-entering');
+      if (card.id === markedCardId) {
+        el.querySelector('.card').classList.add(
+          markedCardSource === 'thankYou' ? 'card-dot-thankyou' : 'card-dot-deck'
+        );
+      }
       handEl.appendChild(el);
     }
   } else {
     handEl.querySelectorAll('.card-slot[data-card-id]').forEach(el => {
       el.classList.toggle('selected', selectedCards.has(el.dataset.cardId));
+      const cardEl = el.querySelector('.card');
+      if (cardEl) {
+        cardEl.classList.remove('card-dot-deck', 'card-dot-thankyou');
+        if (el.dataset.cardId === markedCardId) {
+          cardEl.classList.add(markedCardSource === 'thankYou' ? 'card-dot-thankyou' : 'card-dot-deck');
+        }
+      }
     });
   }
 }
@@ -229,13 +256,20 @@ function renderCenter() {
   const discardPile = gameState.discardPile;
   if (discardPile) {
     if (discardPile.hidden) {
+      // 카드 앞면 유지하되 흐릿하게 (땡큐 불가 신호)
       discardEl.innerHTML = '';
-      discardEl.className = 'card card-back';
+      if (lastDiscardCardData) {
+        discardEl.className = 'card ' + getCardColorClass(lastDiscardCardData) + ' discard-dimmed';
+        discardEl.appendChild(cardInnerEl(lastDiscardCardData));
+      } else {
+        discardEl.className = 'card discard-dimmed';
+      }
       discardEl.dataset.topId = '';
       discardEl.onclick = null;
     } else {
       const prevTopId = discardEl.dataset.topId;
       const newTopId = discardPile.top?.id;
+      lastDiscardCardData = discardPile.top; // 마지막 카드 기억
       discardEl.innerHTML = '';
       discardEl.className = 'card ' + getCardColorClass(discardPile.top);
       discardEl.dataset.topId = newTopId;
@@ -722,6 +756,7 @@ function launchConfetti(winnerCode) {
 
 // ── ThankYou Announce ──────────────────────────────────────────────────
 socket.on('thankYouAnnounce', ({ playerCode, playerName }) => {
+  pendingThankYouPlayerCode = playerCode;
   showThankYouBubble(playerCode, playerName);
 });
 

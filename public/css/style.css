@@ -309,6 +309,36 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 /* 땡큐로 카드 가져간 후 버린더미 이전 카드 */
 .card.discard-old { opacity: 0.5; filter: grayscale(60%); }
 
+/* 덱 드로우 카드 — 파란 점 */
+.card.card-dot-deck::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 50%; transform: translateX(-50%);
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #2196f3;
+  box-shadow: 0 0 4px #2196f3;
+}
+
+/* 땡큐 카드 — 형광초록 점 */
+.card.card-dot-thankyou::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 50%; transform: translateX(-50%);
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #00e676;
+  box-shadow: 0 0 6px #00e676;
+}
+
+/* 땡큐 불가 상태 — 앞면 유지하되 흐릿하게 */
+.card.discard-dimmed {
+  opacity: 0.35;
+  filter: grayscale(70%);
+  transition: opacity 0.4s ease, filter 0.4s ease;
+  cursor: default;
+}
+
 /* ── Sort Buttons ────────────────────────────────────────────────────── */
 #sort-buttons { display: flex; gap: 4px; margin-top: 3px; }
 .btn-sort { padding: 4px 10px; border-radius: 5px; border: none; cursor: pointer; font-size: 11px; background: rgba(255,255,255,0.15); color: #ddd; }

@@ -91,17 +91,19 @@ function handleTimeout(game) {
         for (const p of game.players) {
           if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
           const useful = isCardUseful(card, p.hand, game.combos, p.registered);
-          const d = useful ? 3000 + Math.random() * 4000 : 5000 + Math.random() * 3000;
-          if (useful ? Math.random() < 0.6 : Math.random() < 0.1) {
+          const d = 3000 + Math.random() * 4000;
+          if (useful && Math.random() < 0.7) {
             setTimeout(() => {
               if (!game.thankYou.active || game.thankYou.lock) return;
               const r = tryThankYou(game, p.userCode);
               if (r.ok) {
                 const cty = confirmThankYou(game, p.userCode);
                 broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
-                broadcastGame(game);
-                startTimer(game);
-                setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+                setTimeout(() => {
+                  broadcastGame(game);
+                  startTimer(game);
+                  setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+                }, 600);
               }
             }, d);
           }
@@ -148,18 +150,19 @@ function activateThankYouWindow(game, card) {
     for (const p of game.players) {
       if (!p.isAI || p.userCode === cur.userCode || p.userCode === discarderCode) continue;
       const useful = isCardUseful(card, p.hand, game.combos, p.registered);
-      const d = useful ? 3000 + Math.random() * 4000 : 5000 + Math.random() * 3000;
-      const doIt = useful ? Math.random() < 0.75 : Math.random() < 0.15;
-      if (doIt) {
+      const d = 2000 + Math.random() * 4000;
+      if (useful && Math.random() < 0.82) {
         setTimeout(() => {
           if (!game.thankYou.active || game.thankYou.lock) return;
           const r = tryThankYou(game, p.userCode);
           if (r.ok) {
             const cty = confirmThankYou(game, p.userCode);
             broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
-            broadcastGame(game);
-            startTimer(game);
-            setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+            setTimeout(() => {
+              broadcastGame(game);
+              startTimer(game);
+              setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+            }, 600);
           }
         }, d);
       }
@@ -295,19 +298,26 @@ async function runAITurn(game, aiPlayer) {
   }
 
   if (aiPlayer.registered) {
-    const attaches = decideAttach(aiPlayer.hand, game.combos, true);
-    for (const a of attaches) {
-      const r = attachCards(game, aiPlayer.userCode, [a.card.id], a.comboId);
-      broadcastLog(game, `${aiPlayer.userName} 카드 붙이기`);
-      if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
-      broadcastGame(game);
-      await sleep(400);
+    let didAttach = true;
+    while (didAttach) {
+      didAttach = false;
+      const attaches = decideAttach(aiPlayer.hand, game.combos, true);
+      for (const a of attaches) {
+        const r = attachCards(game, aiPlayer.userCode, [a.card.id], a.comboId);
+        if (!r.ok) continue;
+        didAttach = true;
+        broadcastLog(game, `${aiPlayer.userName} 카드 붙이기`);
+        if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
+        broadcastGame(game);
+        await sleep(400);
+      }
     }
   }
 
   await sleep(400 + Math.random() * 300);
 
   const cardToDiscard = decideDiscard(aiPlayer.hand);
+  if (!cardToDiscard) return; // 패가 비었으면 이미 승리 처리 중
   const dr = discardCard(game, aiPlayer.userCode, cardToDiscard.id);
   if (!dr.ok) return;
 
@@ -592,7 +602,13 @@ io.on('connection', (socket) => {
     waitingRoom.clear();
 
     for (const p of activeGame.players) {
-      if (!p.isAI) emitToPlayer(p.userCode, 'gameState', getPublicState(activeGame, p.userCode));
+      if (p.isAI) continue;
+      if (p.userCode === sess.userCode) {
+        // 게임 시작한 admin은 socket.emit으로 직접 전송 (재연결 시 socket.id 불일치 방지)
+        socket.emit('gameState', getPublicState(activeGame, p.userCode));
+      } else {
+        emitToPlayer(p.userCode, 'gameState', getPublicState(activeGame, p.userCode));
+      }
     }
 
     const cur = getCurrentPlayer(activeGame);
@@ -635,6 +651,7 @@ io.on('connection', (socket) => {
     if (!game) return;
     const result = drawCard(game, sess.userCode, source);
     if (!result.ok) { socket.emit('actionError', result.msg); return; }
+    broadcastLog(game, `${sess.userName} ${source === 'discard' ? '버린 더미' : '카드 더미'}에서 드로우`);
     broadcastGame(game);
     if (game.lastDeckDraw) {
       for (const p of game.players) {
@@ -741,19 +758,20 @@ io.on('connection', (socket) => {
       const cur = getCurrentPlayer(game);
       for (const p of game.players) {
         if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
-        const useful = isCardUseful(card, p.hand);
-        const d = useful ? 3000 + Math.random() * 4000 : 5000 + Math.random() * 3000;
-        const doIt = useful ? Math.random() < 0.6 : Math.random() < 0.1;
-        if (doIt) {
+        const useful = isCardUseful(card, p.hand, game.combos, p.registered);
+        const d = 3000 + Math.random() * 4000;
+        if (useful && Math.random() < 0.6) {
           setTimeout(() => {
             if (!game.thankYou.active || game.thankYou.lock) return;
             const r = tryThankYou(game, p.userCode);
             if (r.ok) {
               const cty = confirmThankYou(game, p.userCode);
               broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
-              broadcastGame(game);
-              startTimer(game);
-              setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+              setTimeout(() => {
+                broadcastGame(game);
+                startTimer(game);
+                setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+              }, 600);
             }
           }, d);
         }
