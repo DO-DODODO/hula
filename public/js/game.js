@@ -1,4 +1,5 @@
-const socket = io();
+const socket = io({ transports: ['websocket'] });
+if ('ontouchstart' in window) document.body.classList.add('mobile');
 
 function getCookie(name) {
   const v = document.cookie.match(`(?:^|; )${name}=([^;]*)`);
@@ -42,9 +43,10 @@ socket.on('connect', () => {
   socket.emit('login', { userCode });
 });
 
+let initialConnectDone = false;
 socket.on('loginSuccess', () => {
-  // 이미 게임 중이면 재시작하지 않음 (재연결 시 중복 방지)
-  if (gameMode === 'single' && !gameState) {
+  if (gameMode === 'single' && !gameState && !initialConnectDone) {
+    initialConnectDone = true;
     socket.emit('startSingle');
   }
   // Multi: server sends gameState automatically
@@ -444,6 +446,7 @@ function isMyTurn() {
 }
 
 function handleDraw(source) {
+  if (document.getElementById('dealing-overlay')) return;
   if (!isMyTurn()) return;
   if (gameState.phase !== 'draw') return;
   if (source === 'discard' && gameState.thankYou?.active) return;
@@ -653,7 +656,10 @@ socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage }) => {
   const overlay = document.getElementById('overlay-gameend');
   overlay.style.display = 'flex';
 
-  document.getElementById('win-announcement').textContent = `🏆 ${winnerName} 승리!`;
+  const winnerResult = results.find(r => r.userCode === winnerCode);
+  const winnerAvatar = AVATAR_MAP[winnerResult?.avatar] || '👤';
+  document.getElementById('win-avatar').textContent = winnerAvatar;
+  document.getElementById('win-name').textContent = `${winnerName} 승리!`;
   if (winMessage && winnerCode === userCode) {
     document.getElementById('win-message').textContent = winMessage;
   }
@@ -677,6 +683,12 @@ function showResults(results) {
       const winRate = (r.totalGames > 0)
         ? Math.round(r.totalWins / r.totalGames * 100) + '%'
         : (r.isAI ? '-' : '-');
+      const notes = [];
+      if (r.rank !== 1 && r.multiplier === 2) notes.push('미등록×2');
+      if (r.thankYouChange) {
+        const unit = gameMode === 'multi' ? '원' : 'pt';
+        notes.push(`벌금 ${r.thankYouChange > 0 ? '+' : ''}${r.thankYouChange.toLocaleString()}${unit}`);
+      }
       return `<tr>
         <td>${r.rank}</td>
         <td>${avatarEmoji} ${r.userName}</td>
@@ -686,6 +698,7 @@ function showResults(results) {
         </td>
         <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance + 'pt') : '-'}</td>
         <td>${winRate}</td>
+        <td style="font-size:0.8em;color:#aaa">${notes.join(' / ') || '-'}</td>
       </tr>`;
     }).join('');
 }
@@ -740,7 +753,7 @@ function launchConfetti(winnerCode) {
   for (let i = 0; i < 80; i++) {
     const piece = document.createElement('div');
     piece.className = 'confetti-piece';
-    const spread = 40;
+    const spread = document.body.classList.contains('mobile') ? 20 : 40;
     piece.style.cssText = `
       left: ${originX + (Math.random() - 0.5) * spread}%;
       top: ${Math.max(0, originY - 10)}%;
@@ -776,14 +789,38 @@ function showBubble(playerCode, text, isCancel = false) {
   if (!targetEl) return;
 
   const bubble = document.createElement('div');
-  bubble.className = 'thankyou-bubble' + (isCancel ? ' cancel' : '');
-  if (targetEl.id === 'player-top') bubble.dataset.dir = 'below';
-  else if (targetEl.id === 'player-left') bubble.dataset.dir = 'right';
-  else if (targetEl.id === 'player-right') bubble.dataset.dir = 'left';
-  else bubble.dataset.dir = 'above';
   bubble.textContent = text;
-  targetEl.style.position = 'relative';
-  targetEl.appendChild(bubble);
+
+  if (isCancel) {
+    bubble.className = 'thankyou-bubble cancel cancel-popup';
+    bubble.style.position = 'fixed';
+    bubble.style.visibility = 'hidden';
+    bubble.style.top = '-9999px';
+    document.body.appendChild(bubble);
+
+    const bw = bubble.offsetWidth;
+    const bh = bubble.offsetHeight;
+    const rect = targetEl.getBoundingClientRect();
+    const isTop = targetEl.id === 'player-top';
+
+    let top = isTop ? rect.bottom + 10 : rect.top - bh - 10;
+    let left = rect.left + rect.width / 2 - bw / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
+    top = Math.max(8, Math.min(top, window.innerHeight - bh - 8));
+
+    bubble.style.top = top + 'px';
+    bubble.style.left = left + 'px';
+    bubble.style.visibility = 'visible';
+  } else {
+    bubble.className = 'thankyou-bubble';
+    if (targetEl.id === 'player-top') bubble.dataset.dir = 'below';
+    else if (targetEl.id === 'player-left') bubble.dataset.dir = 'right';
+    else if (targetEl.id === 'player-right') bubble.dataset.dir = 'left';
+    else bubble.dataset.dir = 'above';
+    targetEl.style.position = 'relative';
+    targetEl.appendChild(bubble);
+  }
+
   setTimeout(() => bubble.remove(), 2500);
 }
 
@@ -803,14 +840,15 @@ function addLog(msg) {
   el.textContent = msg;
   log.prepend(el);
   // 최대 20줄 유지
-  while (log.children.length > 20) log.removeChild(log.lastChild);
+  const maxLog = document.body.classList.contains('mobile') ? 3 : 20;
+  while (log.children.length > maxLog) log.removeChild(log.lastChild);
 }
 
 // ── Dealing Animation ──────────────────────────────────────────────────
 function showDealingAnimation() {
   const overlay = document.createElement('div');
   overlay.id = 'dealing-overlay';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:500;display:flex;align-items:center;justify-content:center;';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:500;display:flex;align-items:center;justify-content:center;pointer-events:none;';
   const txt = document.createElement('div');
   txt.style.cssText = 'color:#f0b90b;font-size:20px;font-weight:bold;letter-spacing:2px;';
   txt.textContent = '카드 배분 중...';

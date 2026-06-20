@@ -150,7 +150,11 @@
   <div id="overlay-gameend" style="display:none">
     <div id="confetti-container"></div>
     <div id="gameend-box">
-      <div id="win-announcement"></div>
+      <div id="win-trophy">🏆</div>
+      <div id="win-announcement">
+        <span id="win-avatar"></span>
+        <span id="win-name"></span>
+      </div>
       <div id="win-message"></div>
       <button id="btn-gameend-ok" class="btn-primary">확인</button>
     </div>
@@ -163,7 +167,7 @@
       <table id="results-table">
         <thead>
           <tr>
-            <th>순위</th><th>이름</th><th>카드점수</th><th>이번 게임</th><th>보유</th><th>승률</th>
+            <th>순위</th><th>이름</th><th>카드점수</th><th>이번 게임</th><th>보유</th><th>승률</th><th>내역</th>
           </tr>
         </thead>
         <tbody id="results-body"></tbody>

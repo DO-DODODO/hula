@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ transports: ['websocket'] });
 let me = null;
 let rankingData = null;
 let isAdmin = false;
@@ -70,7 +70,9 @@ document.getElementById('btn-enter-multi').onclick = () => {
   socket.emit('joinMulti', { entryCode: code });
 };
 
+let inWaitingRoom = false;
 socket.on('joinMultiOk', () => {
+  inWaitingRoom = true;
   showScreen('screen-waiting');
   if (isAdmin) {
     document.getElementById('admin-start-area').style.display = '';
@@ -95,6 +97,7 @@ socket.on('adminStartError', msg => {
 });
 
 socket.on('gameState', () => {
+  if (!inWaitingRoom) return;
   setCookie('gameMode', 'multi');
   location.href = 'game.html';
 });

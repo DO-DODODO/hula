@@ -114,9 +114,9 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 }
 
 /* ── Center ──────────────────────────────────────────────────────────── */
-#center-area { grid-area: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; overflow: hidden; padding: 4px; }
+#center-area { grid-area: center; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; overflow: hidden; padding: 4px; }
 
-#combos-area { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: flex-start; max-height: 55%; overflow-y: auto; width: 100%; }
+#combos-area { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: flex-start; flex: 1; overflow-y: auto; width: 100%; }
 
 #piles-area { display: flex; align-items: center; gap: 12px; }
 .pile { display: flex; flex-direction: column; align-items: center; gap: 3px; }
@@ -201,7 +201,9 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .combo-group.selected-target { border-color: gold; box-shadow: 0 0 8px rgba(255,215,0,0.6); }
 
 /* ── Deck & Discard ──────────────────────────────────────────────────── */
-#deck-card { cursor: pointer; position: relative; }
+#deck-card { cursor: pointer; position: relative; touch-action: manipulation; }
+#discard-card { touch-action: manipulation; }
+.card-slot { touch-action: manipulation; }
 #deck-count { position: absolute; bottom: 2px; right: 3px; font-size: 8px; color: #adf; }
 
 /* ── Thank You Button ────────────────────────────────────────────────── */
@@ -273,9 +275,14 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .thankyou-bubble.cancel {
   background: rgba(80, 80, 80, 0.93);
 }
+.thankyou-bubble.cancel-popup {
+  animation: cancelPop 0.25s ease, cancelFade 0.5s ease 2s forwards;
+}
+@keyframes cancelPop  { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes cancelFade { to   { opacity: 0; transform: scale(0.9) translateY(-6px); } }
 /* 위(above, 기본) */
 .thankyou-bubble[data-dir="above"] {
-  bottom: 100%; left: 50%;
+  bottom: calc(100% + 10px); left: 50%;
   transform: translateX(-50%);
   animation: bubbleAbovePop 0.25s ease, bubbleAboveFade 0.5s ease 2s forwards;
 }
@@ -348,7 +355,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 #game-log {
   position: absolute; bottom: 30%; right: 8px;
   width: clamp(140px, 16vw, 220px);
-  max-height: 100px; overflow-y: auto;
+  max-height: 100px; overflow-y: auto; padding-top: 4px;
   display: flex; flex-direction: column-reverse; gap: 3px;
   pointer-events: none;
 }
@@ -374,9 +381,15 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 /* ── Game End Overlay ────────────────────────────────────────────────── */
 #overlay-gameend { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 300; }
-#gameend-box { background: #1e1e1e; border-radius: 16px; padding: 32px; text-align: center; display: flex; flex-direction: column; gap: 16px; color: #fff; position: relative; z-index: 1; }
-#win-announcement { font-size: 24px; color: var(--gold); font-weight: bold; }
-#win-message { font-size: 18px; }
+#gameend-box { background: #1e1e1e; border: 2px solid var(--gold); border-radius: 20px; padding: 40px 60px; text-align: center; display: flex; flex-direction: column; gap: 16px; color: #fff; position: relative; z-index: 1; }
+#win-trophy { font-size: 52px; }
+#win-announcement { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 26px; color: var(--gold); font-weight: bold; }
+#win-avatar { font-size: 44px; display: inline-block; animation: winBounce 0.8s ease-in-out infinite; }
+#win-message { font-size: 26px; font-weight: bold; }
+@keyframes winBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
 #confetti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 299; }
 .confetti-piece { position: absolute; width: 8px; height: 8px; border-radius: 2px; animation: confettiFall linear forwards; }
 @keyframes confettiFall { to { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
@@ -414,6 +427,25 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   background: rgba(201,168,76,0.25);
 }
 .avatar-item:hover { background: rgba(255,255,255,0.2); }
+
+/* ── Mobile ──────────────────────────────────────────────────────────── */
+body.mobile #game-table {
+  grid-template-rows: 16% 46% 38%;
+}
+body.mobile #combos-area .card-slot {
+  width: clamp(38px, 4.5vw, 60px);
+  height: clamp(54px, 6.3vw, 84px);
+}
+body.mobile #combos-area .card {
+  width: 100%; height: 100%;
+}
+body.mobile #piles-area {
+  margin-top: 6px;
+}
+body.mobile #game-log {
+  max-height: none;
+  overflow: visible;
+}
 
 /* ── Attach Modal ────────────────────────────────────────────────────── */
 #attach-combo-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }

@@ -393,14 +393,17 @@ function calculateResults(game, winnerCode = null) {
         const multiplier = loser.registered ? 1 : 2;
         total += loser.cardSum * unit * multiplier;
       }
+      r.multiplier = 1;
       r.pointChange = total;
     } else {
       const multiplier = r.registered ? 1 : 2;
+      r.multiplier = multiplier;
       r.pointChange = -(r.cardSum * unit * multiplier);
     }
     // 땡큐 취소 벌금/보상 합산
-    if (game.pendingChanges[r.userCode]) {
-      r.pointChange += game.pendingChanges[r.userCode];
+    r.thankYouChange = game.pendingChanges[r.userCode] || 0;
+    if (r.thankYouChange) {
+      r.pointChange += r.thankYouChange;
     }
   }
 

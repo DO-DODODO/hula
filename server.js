@@ -142,16 +142,18 @@ function activateThankYouWindow(game, card) {
   setTimeout(() => {
     broadcastGame(game);
 
+
     const cur = getCurrentPlayer(game);
     if (!cur) return;
+    broadcastLog(game, `${cur.userName} 생각 중...`);
     startTimer(game);
 
     // 현재 플레이어·버린 플레이어 제외한 다른 AI가 땡큐 고려 (3~7초 랜덤)
     for (const p of game.players) {
       if (!p.isAI || p.userCode === cur.userCode || p.userCode === discarderCode) continue;
       const useful = isCardUseful(card, p.hand, game.combos, p.registered);
-      const d = 2000 + Math.random() * 4000;
-      if (useful && Math.random() < 0.82) {
+      const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
+      if (useful && Math.random() < 0.95) {
         setTimeout(() => {
           if (!game.thankYou.active || game.thankYou.lock) return;
           const r = tryThankYou(game, p.userCode);
@@ -172,7 +174,7 @@ function activateThankYouWindow(game, card) {
     if (cur.isAI) {
       setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 3000);
     }
-  }, 300);
+  }, 600);
 }
 
 function clearThankYouTimeout(game) {
@@ -187,9 +189,10 @@ function advanceTurn(game, winnerCode = null) {
   broadcastGame(game);
   const cur = getCurrentPlayer(game);
   if (!cur) return;
+  broadcastLog(game, `${cur.userName} 생각 중...`);
   if (cur.isAI) {
     startTimer(game);
-    setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
+    setTimeout(() => runAITurn(game, cur), 1500 + Math.random() * 1500);
   } else {
     startTimer(game);
   }
@@ -208,9 +211,6 @@ async function runAITurn(game, aiPlayer) {
     const drawSrc = (!game.firstTurn && discardTop && decideDraw(aiPlayer.hand, discardTop) === 'discard') ? 'discard' : 'deck';
 
     if (game.deck.length === 0 && drawSrc === 'deck') { endGame(game, null); return; }
-
-    broadcastLog(game, `${aiPlayer.userName} 생각 중...`);
-    await sleep(500 + Math.random() * 500);
 
     // 생각 중 사이에 다른 사람이 땡큐해서 턴이 바뀌었으면 종료
     if (getCurrentPlayer(game)?.userCode !== aiPlayer.userCode) return;
@@ -411,11 +411,21 @@ io.on('connection', (socket) => {
       singlePoints: user.singlePoints, multiBalance: user.multiBalance,
       winMessage: user.winMessage, avatar: user.avatar || 'person'
     });
-    // game.html로 이동 후 새 소켓으로 재접속한 경우 → 플레이어 복구 후 게임 상태 재전송
+    // 싱글 게임 재연결: 기존 게임을 새 socket.id로 이전 후 상태 재전송
+    for (const [oldSid, game] of singleGames) {
+      const human = game.players.find(p => !p.isAI);
+      if (human?.userCode === user.userCode && game.status === 'playing') {
+        singleGames.delete(oldSid);
+        singleGames.set(socket.id, game);
+        socket.emit('gameState', getPublicState(game, user.userCode));
+        break;
+      }
+    }
+    // 멀티 게임 재연결: 플레이어 복구 후 게임 상태 재전송
     if (activeGame && activeGame.status === 'playing') {
       const player = activeGame.players.find(p => p.userCode === user.userCode);
       if (player) {
-        player.isAI = false; // 잠깐 끊긴 동안 AI로 전환된 것 복구
+        player.isAI = false;
         socket.emit('gameState', getPublicState(activeGame, user.userCode));
       }
     }
