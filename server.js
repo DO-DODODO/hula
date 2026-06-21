@@ -24,7 +24,7 @@ const sessions = new Map();
 const waitingRoom = new Map();
 let activeGame = null;
 const singleGames = new Map();
-const lastSingleWinners = new Map(); // socket.id → 마지막 싱글 승자 userCode
+const lastSingleWinners = new Map(); // userCode → 마지막 싱글 승자 userCode
 let lastMultiGamePlayers = null;
 let lastMultiGameWinnerCode = null;
 const entryAttempts = new Map(); // socket.id → 시도 횟수
@@ -115,16 +115,16 @@ function handleTimeout(game) {
     // 정산 때 반영 (pendingChanges에 기록)
     game.pendingChanges[takerCode] = (game.pendingChanges[takerCode] || 0) - penalty;
     for (const p of others) {
-      if (!p.isAI) game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
+      game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
     }
     return;
   }
 
   const result = autoTimeout(game);
-  if (result.deckEmpty) { endGame(game, null); return; }
+  if (result.deckEmpty) { setTimeout(() => endGame(game, null), 3000); return; }
 
   broadcastGame(game);
-  if (game.lastDeckDraw) { game.lastDeckDraw = false; endGame(game, null); return; }
+  if (game.lastDeckDraw) { game.lastDeckDraw = false; setTimeout(() => endGame(game, null), 3000); return; }
   activateThankYouWindow(game, result.discardedCard);
 }
 
@@ -265,7 +265,7 @@ async function runAITurn(game, aiPlayer) {
             const penalty = unit * others.length;
             game.pendingChanges[aiPlayer.userCode] = (game.pendingChanges[aiPlayer.userCode] || 0) - penalty;
             for (const p of others) {
-              if (!p.isAI) game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
+              game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
             }
             // 클라이언트에 취소 알림 (말풍선용)
             for (const p of game.players) {
@@ -324,7 +324,7 @@ async function runAITurn(game, aiPlayer) {
   broadcastLog(game, `${aiPlayer.userName} 카드 버림`);
   clearTimer(game);
   if (dr.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
-  if (game.lastDeckDraw) { game.lastDeckDraw = false; endGame(game, null); return; }
+  if (game.lastDeckDraw) { game.lastDeckDraw = false; broadcastGame(game); await sleep(3000); endGame(game, null); return; }
   activateThankYouWindow(game, dr.card);
 }
 
@@ -383,10 +383,9 @@ async function endGame(game, winnerCode) {
 
   if (game.mode === 'single') {
     const humanPlayer = game.players.find(p => !p.isAI);
-    const sid = getSocketId(humanPlayer?.userCode);
-    if (sid) {
-      lastSingleWinners.set(sid, actualWinnerCode);
-      singleGames.delete(sid);
+    if (humanPlayer) {
+      lastSingleWinners.set(humanPlayer.userCode, actualWinnerCode);
+      singleGames.delete(humanPlayer.userCode);
     }
   } else {
     lastMultiGamePlayers = game.players.map(p => ({
@@ -404,6 +403,17 @@ io.on('connection', (socket) => {
   socket.on('login', async ({ userCode }) => {
     const user = await db.getUser(userCode);
     if (!user) { socket.emit('loginError', '등록되지 않은 코드입니다.'); return; }
+
+    // 같은 계정으로 이미 로그인된 소켓이 있으면 기존 소켓 강제 종료
+    for (const [oldSid, sess] of sessions) {
+      if (sess.userCode === user.userCode && oldSid !== socket.id) {
+        io.to(oldSid).emit('duplicateLogin');
+        io.sockets.sockets.get(oldSid)?.disconnect(true);
+        sessions.delete(oldSid);
+        break;
+      }
+    }
+
     sessions.set(socket.id, { userCode: user.userCode, userName: user.userName });
     socket.emit('loginSuccess', {
       userCode: user.userCode, userName: user.userName,
@@ -411,15 +421,10 @@ io.on('connection', (socket) => {
       singlePoints: user.singlePoints, multiBalance: user.multiBalance,
       winMessage: user.winMessage, avatar: user.avatar || 'person'
     });
-    // 싱글 게임 재연결: 기존 게임을 새 socket.id로 이전 후 상태 재전송
-    for (const [oldSid, game] of singleGames) {
-      const human = game.players.find(p => !p.isAI);
-      if (human?.userCode === user.userCode && game.status === 'playing') {
-        singleGames.delete(oldSid);
-        singleGames.set(socket.id, game);
-        socket.emit('gameState', getPublicState(game, user.userCode));
-        break;
-      }
+    // 싱글 게임 재연결: userCode로 기존 게임 찾아서 상태 재전송
+    const existingSingle = singleGames.get(user.userCode);
+    if (existingSingle && existingSingle.status === 'playing') {
+      socket.emit('gameState', getPublicState(existingSingle, user.userCode));
     }
     // 멀티 게임 재연결: 플레이어 복구 후 게임 상태 재전송
     if (activeGame && activeGame.status === 'playing') {
@@ -511,12 +516,12 @@ io.on('connection', (socket) => {
     if (!user) return;
 
     // 기존 게임이 있으면 타이머·상태 정리 후 교체
-    const prev = singleGames.get(socket.id);
+    const prev = singleGames.get(user.userCode);
     if (prev) {
       clearTimer(prev);
       clearThankYouTimeout(prev);
       prev.status = 'ended';
-      singleGames.delete(socket.id);
+      singleGames.delete(user.userCode);
     }
 
     const aiPlayers = [
@@ -527,7 +532,7 @@ io.on('connection', (socket) => {
     const humanPlayer = { userCode: user.userCode, userName: user.userName, isAI: false, singlePoints: user.singlePoints, avatar: user.avatar || 'person' };
 
     // 지난 판 1등이 다음 판 선공
-    const lastWinnerCode = lastSingleWinners.get(socket.id);
+    const lastWinnerCode = lastSingleWinners.get(user.userCode);
     let players;
     if (lastWinnerCode && lastWinnerCode !== user.userCode) {
       const winnerAI = aiPlayers.find(p => p.userCode === lastWinnerCode);
@@ -542,7 +547,7 @@ io.on('connection', (socket) => {
     }
 
     const game = createGame('single', players);
-    singleGames.set(socket.id, game);
+    singleGames.set(user.userCode, game);
     socket.emit('gameState', getPublicState(game, user.userCode));
 
     const cur = getCurrentPlayer(game);
@@ -710,7 +715,8 @@ io.on('connection', (socket) => {
     }
     if (game.lastDeckDraw) {
       game.lastDeckDraw = false;
-      endGame(game, null);
+      broadcastGame(game);
+      setTimeout(() => endGame(game, null), 3000);
       return;
     }
     activateThankYouWindow(game, result.card);
@@ -758,7 +764,7 @@ io.on('connection', (socket) => {
     // 3. 정산 때 반영 (pendingChanges에 기록)
     game.pendingChanges[sess.userCode] = (game.pendingChanges[sess.userCode] || 0) - penalty;
     for (const p of others) {
-      if (!p.isAI) game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
+      game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
     }
 
     // 재땡큐 가능: AI들에게 다시 땡큐 기회 부여
@@ -858,13 +864,10 @@ io.on('connection', (socket) => {
       }
     }
     sessions.delete(socket.id);
-    singleGames.delete(socket.id);
   });
 
   function getPlayerGame(userCode) {
-    const sid = getSocketId(userCode);
-    if (!sid) return null;
-    if (singleGames.has(sid)) return singleGames.get(sid);
+    if (singleGames.has(userCode)) return singleGames.get(userCode);
     if (activeGame?.players.some(p => p.userCode === userCode)) return activeGame;
     return null;
   }

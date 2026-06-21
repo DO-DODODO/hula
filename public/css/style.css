@@ -1,4 +1,5 @@
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+button, .pile, .card-slot, .card { touch-action: manipulation; }
 
 :root {
   --green: #1a6b3a;

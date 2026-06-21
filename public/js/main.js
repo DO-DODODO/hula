@@ -38,13 +38,25 @@ socket.on('loginSuccess', (user) => {
   showScreen('screen-main');
 });
 socket.on('loginError', (msg) => {
+  showScreen('screen-login');
   document.getElementById('login-error').textContent = msg;
 });
 
-// 쿠키 자동 로그인
+socket.on('duplicateLogin', () => {
+  socket.disconnect();
+  sessionStorage.setItem('kicked', '1');
+  location.reload();
+});
+
+// 쿠키 자동 로그인 (킥 당한 경우 자동 로그인 생략)
 const savedCode = getCookie('userCode');
-if (savedCode) {
+const wasKicked = sessionStorage.getItem('kicked') === '1';
+sessionStorage.removeItem('kicked');
+
+if (savedCode && !wasKicked) {
   socket.emit('login', { userCode: savedCode });
+} else {
+  showScreen('screen-login');
 }
 
 function updateMainScreen() {
@@ -257,19 +269,19 @@ document.getElementById('btn-ranking').onclick = () => {
   showScreen('screen-ranking');
 };
 document.getElementById('btn-back-ranking').onclick = () => showScreen('screen-main');
-document.getElementById('tab-multi').onclick = () => {
-  document.getElementById('tab-multi').classList.add('active');
-  document.getElementById('tab-single').classList.remove('active');
-  renderRanking('multi');
-};
 document.getElementById('tab-single').onclick = () => {
   document.getElementById('tab-single').classList.add('active');
   document.getElementById('tab-multi').classList.remove('active');
   renderRanking('single');
 };
+document.getElementById('tab-multi').onclick = () => {
+  document.getElementById('tab-multi').classList.add('active');
+  document.getElementById('tab-single').classList.remove('active');
+  renderRanking('multi');
+};
 socket.on('ranking', (data) => {
   rankingData = data;
-  renderRanking('multi');
+  renderRanking('single');
 });
 function renderRanking(mode) {
   if (!rankingData) return;
@@ -280,14 +292,19 @@ function renderRanking(mode) {
     <thead><tr>
       <th>순위</th><th>이름</th>
       <th>${mode === 'multi' ? '보유금액' : '포인트'}</th>
-      <th>승리</th>
+      <th>전적</th>
     </tr></thead>
-    <tbody>${rows.map((r, i) => `<tr>
-      <td>${i + 1}</td>
-      <td>${r.userName}</td>
-      <td>${mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : r.singlePoints + '점'}</td>
-      <td>${mode === 'multi' ? r.multiWins : r.singleWins}</td>
-    </tr>`).join('')}</tbody>
+    <tbody>${rows.map((r, i) => {
+      const wins = mode === 'multi' ? r.multiWins : r.singleWins;
+      const games = mode === 'multi' ? r.multiGames : r.singleGames;
+      const losses = (games ?? 0) - (wins ?? 0);
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${r.userName}</td>
+        <td>${mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : r.singlePoints + '점'}</td>
+        <td>${wins ?? 0}승 ${losses}패</td>
+      </tr>`;
+    }).join('')}</tbody>
   </table>`;
 }
 
