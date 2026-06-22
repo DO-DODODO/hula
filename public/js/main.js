@@ -76,11 +76,13 @@ document.getElementById('btn-multi').onclick = () => {
   showScreen('screen-multi-entry');
 };
 document.getElementById('btn-back-multi').onclick = () => showScreen('screen-main');
-document.getElementById('btn-enter-multi').onclick = () => {
+function submitEntryCode() {
   const code = document.getElementById('input-entrycode').value.trim();
   if (!code) return;
   socket.emit('joinMulti', { entryCode: code });
-};
+}
+document.getElementById('btn-enter-multi').onclick = submitEntryCode;
+document.getElementById('input-entrycode').onkeydown = e => { if (e.key === 'Enter') submitEntryCode(); };
 
 let inWaitingRoom = false;
 socket.on('joinMultiOk', () => {

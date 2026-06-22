@@ -628,15 +628,16 @@ document.getElementById('btn-cancel-confirm-yes').onclick = () => {
 
 socket.on('thankYouCancelled', ({ cancellerCode, penalty, gain, auto }) => {
   showBubble(cancellerCode, '땡큐 취소! 😭', true);
+  const unit = gameMode === 'multi' ? '원' : 'pt';
   if (cancellerCode === userCode) {
     if (auto) {
-      document.getElementById('auto-cancel-penalty').textContent = `-${penalty.toLocaleString()}원`;
+      document.getElementById('auto-cancel-penalty').textContent = `-${penalty.toLocaleString()}${unit}`;
       document.getElementById('modal-auto-cancel').style.display = 'flex';
     } else {
-      showNotif(`벌금 -${penalty.toLocaleString()}원 부과`, 'lose-money');
+      showNotif(`벌금 -${penalty.toLocaleString()}${unit} 부과`, 'lose-money');
     }
   } else {
-    showNotif(`+${gain.toLocaleString()}원 지급`, 'win-money');
+    showNotif(`+${gain.toLocaleString()}${unit} 지급`, 'win-money');
   }
 });
 document.getElementById('btn-auto-cancel-ok').onclick = () => {

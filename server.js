@@ -421,18 +421,19 @@ io.on('connection', (socket) => {
       singlePoints: user.singlePoints, multiBalance: user.multiBalance,
       winMessage: user.winMessage, avatar: user.avatar || 'person'
     });
-    // 싱글 게임 재연결: userCode로 기존 게임 찾아서 상태 재전송
-    const existingSingle = singleGames.get(user.userCode);
-    if (existingSingle && existingSingle.status === 'playing') {
-      socket.emit('gameState', getPublicState(existingSingle, user.userCode));
-    }
-    // 멀티 게임 재연결: 플레이어 복구 후 게임 상태 재전송
+    // 멀티 게임 재연결: 싱글보다 멀티 우선
     if (activeGame && activeGame.status === 'playing') {
       const player = activeGame.players.find(p => p.userCode === user.userCode);
       if (player) {
         player.isAI = false;
         socket.emit('gameState', getPublicState(activeGame, user.userCode));
+        return;
       }
+    }
+    // 싱글 게임 재연결
+    const existingSingle = singleGames.get(user.userCode);
+    if (existingSingle && existingSingle.status === 'playing') {
+      socket.emit('gameState', getPublicState(existingSingle, user.userCode));
     }
   });
 
@@ -515,7 +516,13 @@ io.on('connection', (socket) => {
     const user = await db.getUser(sess.userCode);
     if (!user) return;
 
-    // 기존 게임이 있으면 타이머·상태 정리 후 교체
+    // 멀티게임에 참가 중이면 AI로 교체하고 싱글 시작
+    if (activeGame && activeGame.status === 'playing') {
+      const inMulti = activeGame.players.find(p => p.userCode === user.userCode);
+      if (inMulti) inMulti.isAI = true;
+    }
+
+    // 기존 싱글게임이 있으면 정리 후 교체
     const prev = singleGames.get(user.userCode);
     if (prev) {
       clearTimer(prev);
@@ -612,6 +619,17 @@ io.on('connection', (socket) => {
     ];
     const aiPlayers = aiPool.slice(0, 4 - humanPlayers.length);
 
+    // 참가자들의 기존 싱글게임 정리
+    for (const [uc] of waitingRoom) {
+      const prev = singleGames.get(uc);
+      if (prev) {
+        clearTimer(prev);
+        clearThankYouTimeout(prev);
+        prev.status = 'ended';
+        singleGames.delete(uc);
+      }
+    }
+
     const allPlayers = [...humanPlayers, ...aiPlayers].sort(() => Math.random() - 0.5);
     activeGame = createGame('multi', allPlayers);
     waitingRoom.clear();
@@ -648,12 +666,12 @@ io.on('connection', (socket) => {
       waitingRoom.clear();
     } else {
       // 싱글모드: 어드민 본인의 싱글 게임 중단
-      const singleGame = singleGames.get(socket.id);
+      const singleGame = singleGames.get(sess.userCode);
       if (singleGame) {
         clearTimer(singleGame);
         clearThankYouTimeout(singleGame);
         singleGame.status = 'ended';
-        singleGames.delete(socket.id);
+        singleGames.delete(sess.userCode);
       }
       socket.emit('gameStopped', {});
     }
@@ -856,10 +874,15 @@ io.on('connection', (socket) => {
         const disc = activeGame.players.find(p => p.userCode === sess.userCode);
         if (disc) {
           disc.isAI = true;
-          const stillHuman = activeGame.players.filter(p => !p.isAI);
-          if (stillHuman.length <= 1) {
-            for (const p of stillHuman) emitToPlayer(p.userCode, 'canStop', {});
-          }
+          // 재접속 타이밍에 isAI=true로 AI 턴이 실행되지 않도록 짧은 딜레이 후 체크
+          setTimeout(() => {
+            const stillDisc = activeGame?.players.find(p => p.userCode === sess.userCode);
+            if (!stillDisc || !stillDisc.isAI) return; // 이미 재접속됨
+            const stillHuman = activeGame.players.filter(p => !p.isAI);
+            if (stillHuman.length <= 1) {
+              for (const p of stillHuman) emitToPlayer(p.userCode, 'canStop', {});
+            }
+          }, 3000);
         }
       }
     }
@@ -867,8 +890,8 @@ io.on('connection', (socket) => {
   });
 
   function getPlayerGame(userCode) {
-    if (singleGames.has(userCode)) return singleGames.get(userCode);
     if (activeGame?.players.some(p => p.userCode === userCode)) return activeGame;
+    if (singleGames.has(userCode)) return singleGames.get(userCode);
     return null;
   }
 });

@@ -59,7 +59,7 @@ async function getUser(userCode) {
 }
 
 async function createUser(userCode, userName, isAdmin = 0) {
-  await db.query(sql`INSERT INTO users (userCode, userName, isAdmin) VALUES (${userCode}, ${userName}, ${isAdmin})`);
+  await db.query(sql`INSERT INTO users (userCode, userName, isAdmin, singlePoints, multiBalance) VALUES (${userCode}, ${userName}, ${isAdmin}, 100, 1000000)`);
 }
 
 async function updateUser(userCode, fields) {
