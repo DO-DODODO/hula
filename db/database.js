@@ -119,7 +119,7 @@ async function getUserCount() {
 
 async function getMultiRanking() {
   return db.query(sql`
-    SELECT userCode, userName, multiBalance, multiWins, multiGames
+    SELECT userCode, userName, avatar, multiBalance, multiWins, multiGames
     FROM users
     ORDER BY multiBalance DESC, multiWins DESC
     LIMIT 20
@@ -128,7 +128,7 @@ async function getMultiRanking() {
 
 async function getSingleRanking() {
   return db.query(sql`
-    SELECT userCode, userName, singlePoints, singleWins, singleGames
+    SELECT userCode, userName, avatar, singlePoints, singleWins, singleGames
     FROM users
     ORDER BY singlePoints DESC, singleWins DESC
     LIMIT 20

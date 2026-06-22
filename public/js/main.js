@@ -300,9 +300,10 @@ function renderRanking(mode) {
       const wins = mode === 'multi' ? r.multiWins : r.singleWins;
       const games = mode === 'multi' ? r.multiGames : r.singleGames;
       const losses = (games ?? 0) - (wins ?? 0);
+      const avatarEmoji = (AVATARS.find(a => a.key === r.avatar) || AVATARS[0]).emoji;
       return `<tr>
         <td>${i + 1}</td>
-        <td>${r.userName}</td>
+        <td>${avatarEmoji} ${r.userName}</td>
         <td>${mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : r.singlePoints + '점'}</td>
         <td>${wins ?? 0}승 ${losses}패</td>
       </tr>`;
