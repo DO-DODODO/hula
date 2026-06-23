@@ -351,14 +351,14 @@ function calculateResults(game, winnerCode = null) {
   // Determine ranks
   if (winnerCode) {
     results.forEach(r => { r.rank = r.userCode === winnerCode ? 1 : 2; });
-    // Ties among losers by cardSum, then hand count
+    const effectivePay = r => r.cardSum * (r.registered ? 1 : 2);
     const losers = results.filter(r => r.rank === 2).sort((a, b) => {
-      if (a.cardSum !== b.cardSum) return a.cardSum - b.cardSum;
+      if (effectivePay(a) !== effectivePay(b)) return effectivePay(a) - effectivePay(b);
       return a.hand.length - b.hand.length;
     });
     let rank = 2;
     for (let i = 0; i < losers.length; i++) {
-      if (i > 0 && losers[i].cardSum === losers[i-1].cardSum && losers[i].hand.length === losers[i-1].hand.length) {
+      if (i > 0 && effectivePay(losers[i]) === effectivePay(losers[i-1]) && losers[i].hand.length === losers[i-1].hand.length) {
         losers[i].rank = losers[i-1].rank;
       } else {
         losers[i].rank = rank;
@@ -366,14 +366,15 @@ function calculateResults(game, winnerCode = null) {
       rank++;
     }
   } else {
-    // Deck exhausted: rank by cardSum, then hand count
+    // Deck exhausted: rank by effective payment (cardSum * multiplier), then hand count
+    const effectivePay = r => r.cardSum * (r.registered ? 1 : 2);
     const sorted = [...results].sort((a, b) => {
-      if (a.cardSum !== b.cardSum) return a.cardSum - b.cardSum;
+      if (effectivePay(a) !== effectivePay(b)) return effectivePay(a) - effectivePay(b);
       return a.hand.length - b.hand.length;
     });
     let rank = 1;
     for (let i = 0; i < sorted.length; i++) {
-      if (i > 0 && sorted[i].cardSum === sorted[i-1].cardSum && sorted[i].hand.length === sorted[i-1].hand.length) {
+      if (i > 0 && effectivePay(sorted[i]) === effectivePay(sorted[i-1]) && sorted[i].hand.length === sorted[i-1].hand.length) {
         sorted[i].rank = sorted[i-1].rank;
       } else {
         sorted[i].rank = rank;
