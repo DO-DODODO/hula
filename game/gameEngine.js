@@ -67,7 +67,7 @@ function getPublicState(game, viewerCode = null) {
       }
       if (game.discardPile.length > 0) {
         return game.discardPileHidden
-          ? { top: null, count: game.discardPile.length, hidden: true }
+          ? { top: game.discardPile[game.discardPile.length - 1] ?? null, count: game.discardPile.length, hidden: true }
           : { top: game.discardPile[game.discardPile.length - 1], count: game.discardPile.length };
       }
       return null;

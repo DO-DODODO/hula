@@ -11,7 +11,7 @@ const {
   calculateResults
 } = require('./game/gameEngine');
 const { decideDraw, decideActions, decideAttach, decideDiscard, isCardUseful, findCombos } = require('./game/aiPlayer');
-const { canAttach } = require('./game/cardUtils');
+const { canAttach, cardName } = require('./game/cardUtils');
 const { getUserCount } = require('./db/database');
 
 const app = express();
@@ -700,7 +700,7 @@ io.on('connection', (socket) => {
     if (!game) return;
     const result = registerCards(game, sess.userCode, cardIds);
     if (!result.ok) { socket.emit('actionError', result.msg); return; }
-    broadcastLog(game, `${sess.userName} 조합 등록!`);
+    broadcastLog(game, `${sess.userName} 등록: [${result.combo.cards.map(cardName).join(', ')}]`);
     broadcastGame(game);
     if (result.win) { setTimeout(() => endGame(game, sess.userCode), 1000); return; }
   });
@@ -710,9 +710,11 @@ io.on('connection', (socket) => {
     if (!sess) return;
     const game = getPlayerGame(sess.userCode);
     if (!game) return;
+    const attachingPlayer = game.players.find(p => p.userCode === sess.userCode);
+    const attachingCards = cardIds.map(id => attachingPlayer?.hand.find(c => c.id === id)).filter(Boolean);
     const result = attachCards(game, sess.userCode, cardIds, comboId);
     if (!result.ok) { socket.emit('actionError', result.msg); return; }
-    broadcastLog(game, `${sess.userName} 카드 붙이기`);
+    broadcastLog(game, `${sess.userName} 붙이기: [${attachingCards.map(cardName).join(', ')}]`);
     broadcastGame(game);
     if (result.win) { setTimeout(() => endGame(game, sess.userCode), 1000); return; }
   });

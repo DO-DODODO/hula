@@ -289,9 +289,10 @@ function renderCenter() {
     if (discardPile.hidden) {
       // 카드 앞면 유지하되 흐릿하게 (땡큐 불가 신호)
       discardEl.innerHTML = '';
-      if (lastDiscardCardData) {
-        discardEl.className = 'card ' + getCardColorClass(lastDiscardCardData) + ' discard-dimmed';
-        discardEl.appendChild(cardInnerEl(lastDiscardCardData));
+      const dimCard = discardPile.top || lastDiscardCardData;
+      if (dimCard) {
+        discardEl.className = 'card ' + getCardColorClass(dimCard) + ' discard-dimmed';
+        discardEl.appendChild(cardInnerEl(dimCard));
       } else {
         discardEl.className = 'card discard-dimmed';
       }
@@ -701,9 +702,7 @@ socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage }) => {
   const winnerAvatar = AVATAR_MAP[winnerResult?.avatar] || '👤';
   document.getElementById('win-avatar').textContent = winnerAvatar;
   document.getElementById('win-name').textContent = `${winnerName} 승리!`;
-  if (winMessage && winnerCode === userCode) {
-    document.getElementById('win-message').textContent = winMessage;
-  }
+  document.getElementById('win-message').textContent = (winMessage && winnerCode === userCode) ? winMessage : '';
 
   launchConfetti(winnerCode);
 
