@@ -388,6 +388,15 @@ async function endGame(game, winnerCode) {
       singleGames.delete(humanPlayer.userCode);
     }
   } else {
+    // 잔액 0 이하인 플레이어 퇴장 처리
+    for (const p of game.players) {
+      if (p.isAI) continue;
+      const user = await db.getUser(p.userCode);
+      if (user && user.multiBalance <= 0) {
+        setTimeout(() => emitToPlayer(p.userCode, 'multiKicked', {}), 3000);
+      }
+    }
+
     lastMultiGamePlayers = game.players.map(p => ({
       userCode: p.userCode, userName: p.userName, isAI: p.isAI, avatar: p.avatar
     }));
@@ -584,7 +593,7 @@ io.on('connection', (socket) => {
     entryAttempts.delete(socket.id);
     const user = await db.getUser(sess.userCode);
     if (!user) return;
-    if (user.multiBalance < 1000) { socket.emit('joinMultiError', '잔액이 1,000원 미만입니다.'); return; }
+    if (user.multiBalance <= 0) { socket.emit('joinMultiError', '잔액이 없습니다.'); return; }
     if (waitingRoom.size >= 4) { socket.emit('joinMultiError', '대기실이 꽉 찼습니다 (최대 4명).'); return; }
     waitingRoom.set(sess.userCode, socket.id);
     socket.join('waiting');
@@ -827,6 +836,17 @@ io.on('connection', (socket) => {
     const me = await db.getUser(sess.userCode);
     if (!me?.isAdmin) return;
     if (!lastMultiGamePlayers || activeGame) return;
+
+    // 오프라인 플레이어 확인
+    const offlinePlayers = lastMultiGamePlayers.filter(p => !p.isAI && !getSocketId(p.userCode));
+    if (offlinePlayers.length > 0) {
+      const names = offlinePlayers.map(p => p.userName).join(', ');
+      socket.emit('playAgainError', `${names}님이 나갔습니다. 메뉴로 돌아갑니다.`);
+      for (const p of lastMultiGamePlayers) {
+        if (!p.isAI) emitToPlayer(p.userCode, 'playAgainError', `${names}님이 나갔습니다. 메뉴로 돌아갑니다.`);
+      }
+      return;
+    }
 
     // 승자 먼저, 나머지 이전 순서 유지
     let players = [...lastMultiGamePlayers];

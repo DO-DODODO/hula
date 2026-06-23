@@ -121,6 +121,16 @@ socket.on('gameStopped', () => {
   setTimeout(() => { socket.disconnect(); location.href = '/'; }, 2000);
 });
 
+socket.on('multiKicked', () => {
+  showNotif('잔액이 없어 멀티모드에서 퇴장됩니다.', 'info');
+  setTimeout(() => { socket.disconnect(); location.href = '/'; }, 3000);
+});
+
+socket.on('playAgainError', (msg) => {
+  showNotif(msg, 'info');
+  setTimeout(() => { socket.disconnect(); location.href = '/'; }, 3000);
+});
+
 socket.on('duplicateLogin', () => {
   socket.disconnect();
   releaseWakeLock();
