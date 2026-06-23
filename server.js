@@ -370,13 +370,13 @@ async function endGame(game, winnerCode) {
   }
 
   const winnerName = results.find(r => r.rank === 1)?.userName;
+  const winnerUser = actualWinnerCode ? await db.getUser(actualWinnerCode) : null;
+  const winMessage = winnerUser?.winMessage || null;
 
   for (const p of game.players) {
     if (!p.isAI) {
-      const user = await db.getUser(p.userCode);
       emitToPlayer(p.userCode, 'gameEnd', {
-        results, winnerCode: actualWinnerCode, winnerName,
-        winMessage: actualWinnerCode === p.userCode ? user?.winMessage : null
+        results, winnerCode: actualWinnerCode, winnerName, winMessage
       });
     }
   }
