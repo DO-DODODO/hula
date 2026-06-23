@@ -236,7 +236,7 @@ async function runAITurn(game, aiPlayer) {
       const comboWithCard = combos.find(cb => cb.cards.some(c => c.id === takerCard.id));
       if (comboWithCard) {
         const r = registerCards(game, aiPlayer.userCode, comboWithCard.cards.map(c => c.id));
-        broadcastLog(game, `${aiPlayer.userName} 조합 등록!`);
+        broadcastLog(game, `${aiPlayer.userName} 등록: [${r.combo.cards.map(cardName).join(', ')}]`);
         if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
         broadcastGame(game);
         await sleep(500);
@@ -247,7 +247,7 @@ async function runAITurn(game, aiPlayer) {
           if (canAttach(combo, takerCard)) {
             const r = attachCards(game, aiPlayer.userCode, [takerCard.id], combo.id);
             if (r.ok) {
-              broadcastLog(game, `${aiPlayer.userName} 카드 붙이기`);
+              broadcastLog(game, `${aiPlayer.userName} 붙이기: [${cardName(takerCard)}]`);
               if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
               broadcastGame(game);
               await sleep(400);
@@ -290,7 +290,7 @@ async function runAITurn(game, aiPlayer) {
   for (const action of actions) {
     if (action.type === 'register') {
       const r = registerCards(game, aiPlayer.userCode, action.cards.map(c => c.id));
-      broadcastLog(game, `${aiPlayer.userName} 조합 등록!`);
+      broadcastLog(game, `${aiPlayer.userName} 등록: [${r.combo.cards.map(cardName).join(', ')}]`);
       if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
       broadcastGame(game);
       await sleep(500);
@@ -306,7 +306,7 @@ async function runAITurn(game, aiPlayer) {
         const r = attachCards(game, aiPlayer.userCode, [a.card.id], a.comboId);
         if (!r.ok) continue;
         didAttach = true;
-        broadcastLog(game, `${aiPlayer.userName} 카드 붙이기`);
+        broadcastLog(game, `${aiPlayer.userName} 붙이기: [${cardName(a.card)}]`);
         if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
         broadcastGame(game);
         await sleep(400);
