@@ -585,6 +585,7 @@ io.on('connection', (socket) => {
     const user = await db.getUser(sess.userCode);
     if (!user) return;
     if (user.multiBalance < 1000) { socket.emit('joinMultiError', '잔액이 1,000원 미만입니다.'); return; }
+    if (waitingRoom.size >= 4) { socket.emit('joinMultiError', '대기실이 꽉 찼습니다 (최대 4명).'); return; }
     waitingRoom.set(sess.userCode, socket.id);
     socket.join('waiting');
     await broadcastWaiting();
