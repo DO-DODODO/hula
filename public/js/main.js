@@ -268,6 +268,8 @@ window.deleteUser = (code) => {
 // ── Ranking ────────────────────────────────────────────────────────────
 document.getElementById('btn-ranking').onclick = () => {
   socket.emit('getRanking');
+  document.getElementById('tab-single').classList.add('active');
+  document.getElementById('tab-multi').classList.remove('active');
   showScreen('screen-ranking');
 };
 document.getElementById('btn-back-ranking').onclick = () => showScreen('screen-main');
