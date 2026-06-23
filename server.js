@@ -897,6 +897,15 @@ io.on('connection', (socket) => {
         const disc = activeGame.players.find(p => p.userCode === sess.userCode);
         if (disc) {
           disc.isAI = true;
+          // 연결 끊긴 플레이어가 현재 차례면 타이머 취소 후 AI 턴 실행
+          if (getCurrentPlayer(activeGame)?.userCode === sess.userCode) {
+            clearTimer(activeGame);
+            setTimeout(() => {
+              if (activeGame?.status === 'playing' && getCurrentPlayer(activeGame)?.userCode === sess.userCode) {
+                runAITurn(activeGame, disc);
+              }
+            }, 3000);
+          }
           // 재접속 타이밍에 isAI=true로 AI 턴이 실행되지 않도록 짧은 딜레이 후 체크
           setTimeout(() => {
             const stillDisc = activeGame?.players.find(p => p.userCode === sess.userCode);

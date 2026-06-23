@@ -228,6 +228,7 @@ function autoTimeout(game) {
     } else {
       if (game.deck.length === 0) return { ok: false, deckEmpty: true };
       drawnCard = game.deck.pop();
+      if (game.deck.length === 0) game.lastDeckDraw = true;
     }
     player.hand.push(drawnCard);
     game.phase = 'action';
