@@ -203,6 +203,7 @@ function advanceTurn(game, winnerCode = null) {
 async function runAITurn(game, aiPlayer) {
   if (game.status !== 'playing') return;
   if (getCurrentPlayer(game)?.userCode !== aiPlayer.userCode) return;
+  if (!aiPlayer.isAI) return;
 
   if (game.phase === 'draw') {
     // 땡큐 활성 중이거나 버린더미 hidden이면 덱에서만 드로우 가능

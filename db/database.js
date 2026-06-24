@@ -121,7 +121,8 @@ async function getMultiRanking() {
   return db.query(sql`
     SELECT userCode, userName, avatar, multiBalance, multiWins, multiGames
     FROM users
-    ORDER BY multiBalance DESC, multiWins DESC
+    ORDER BY multiBalance DESC,
+             CAST(multiWins AS REAL) / CASE WHEN multiGames = 0 THEN 1 ELSE multiGames END DESC
     LIMIT 20
   `);
 }
@@ -130,7 +131,8 @@ async function getSingleRanking() {
   return db.query(sql`
     SELECT userCode, userName, avatar, singlePoints, singleWins, singleGames
     FROM users
-    ORDER BY singlePoints DESC, singleWins DESC
+    ORDER BY singlePoints DESC,
+             CAST(singleWins AS REAL) / CASE WHEN singleGames = 0 THEN 1 ELSE singleGames END DESC
     LIMIT 20
   `);
 }

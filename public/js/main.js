@@ -59,6 +59,10 @@ if (savedCode && !wasKicked) {
   showScreen('screen-login');
 }
 
+socket.on('connect', () => {
+  if (savedCode && me) socket.emit('login', { userCode: savedCode });
+});
+
 function updateMainScreen() {
   document.getElementById('main-username').textContent = me.userName;
   document.getElementById('single-balance').textContent = `${me.singlePoints}점`;
@@ -287,6 +291,11 @@ socket.on('ranking', (data) => {
   rankingData = data;
   renderRanking('single');
 });
+function winRate(wins, games) {
+  if (!games) return '-';
+  return Math.round((wins / games) * 100) + '%';
+}
+
 function renderRanking(mode) {
   if (!rankingData) return;
   const rows = rankingData[mode] || [];
@@ -297,6 +306,7 @@ function renderRanking(mode) {
       <th>순위</th><th>이름</th>
       <th>${mode === 'multi' ? '보유금액' : '포인트'}</th>
       <th>전적</th>
+      <th>승률</th>
     </tr></thead>
     <tbody>${rows.map((r, i) => {
       const wins = mode === 'multi' ? r.multiWins : r.singleWins;
@@ -308,6 +318,7 @@ function renderRanking(mode) {
         <td>${avatarEmoji} ${r.userName}</td>
         <td>${mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : r.singlePoints + '점'}</td>
         <td>${wins ?? 0}승 ${losses}패</td>
+        <td>${winRate(wins ?? 0, games ?? 0)}</td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;

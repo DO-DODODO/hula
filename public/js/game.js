@@ -739,8 +739,11 @@ function showResults(results) {
     .sort((a, b) => a.rank - b.rank)
     .map(r => {
       const avatarEmoji = AVATAR_MAP[r.avatar] || (r.isAI ? '🤖' : '👤');
-      const record = r.isAI ? '-'
-        : `${r.totalWins ?? 0}승 ${(r.totalGames ?? 0) - (r.totalWins ?? 0)}패`;
+      const wins = r.totalWins ?? 0;
+      const games = r.totalGames ?? 0;
+      const losses = games - wins;
+      const record = r.isAI ? '-' : `${wins}승 ${losses}패`;
+      const rate = r.isAI || !games ? '-' : Math.round((wins / games) * 100) + '%';
       const notes = [];
       if (r.rank !== 1 && r.multiplier === 2) notes.push('미등록×2');
       if (r.thankYouChange) {
@@ -756,6 +759,7 @@ function showResults(results) {
         </td>
         <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance + 'pt') : '-'}</td>
         <td>${record}</td>
+        <td>${rate}</td>
         <td style="font-size:0.8em;color:#aaa">${notes.join(' / ') || '-'}</td>
       </tr>`;
     }).join('');
