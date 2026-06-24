@@ -144,7 +144,15 @@ socket.on('canStop', () => {
   showNotif('상대방이 모두 나갔습니다. 게임을 중단할 수 있습니다.', 'info');
 });
 
-socket.on('actionError', (msg) => showNotif(msg, 'info'));
+socket.on('actionError', (msg) => {
+  // 낙관적으로 바꾼 phase를 서버가 거부하면 되돌림
+  if (gameState && gameState.phase === 'action' && lastDrawSource) {
+    gameState.phase = 'draw';
+    lastDrawSource = null;
+    render();
+  }
+  showNotif(msg, 'info');
+});
 socket.on('deckEmpty', () => showNotif('카드 덱이 소진됐습니다! 이번 버림 후 카드 합산으로 순위 결정', 'info'));
 
 // ── Render ─────────────────────────────────────────────────────────────

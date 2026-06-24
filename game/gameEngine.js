@@ -178,7 +178,7 @@ function attachCards(game, playerCode, cardIds, comboId) {
 function discardCard(game, playerCode, cardId) {
   const player = game.players.find(p => p.userCode === playerCode);
   if (!player) return { ok: false, msg: '플레이어 없음' };
-  if (game.phase !== 'action' && game.phase !== 'draw') return { ok: false, msg: '버리기 단계가 아닙니다' };
+  if (game.phase !== 'action') return { ok: false, msg: '행동 단계가 아닙니다' };
   if (getCurrentPlayer(game).userCode !== playerCode) return { ok: false, msg: '당신 차례가 아닙니다' };
 
   const card = player.hand.find(c => c.id === cardId);
