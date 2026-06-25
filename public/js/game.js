@@ -214,6 +214,8 @@ function renderPlayer(pos, player, comboGrew = false) {
 
   const avatarEmoji = AVATAR_MAP[player.avatar] || (player.isAI ? '🤖' : '👤');
   el.querySelector('.player-name').textContent = avatarEmoji + ' ' + player.userName;
+  el.querySelector('.player-balance').textContent = gameMode === 'multi' && player.multiBalance !== undefined
+    ? `₩${player.multiBalance.toLocaleString()}` : '';
   el.querySelector('.player-registered').textContent = player.registered ? '✓등록' : '';
 
   const cardsEl = el.querySelector('.player-cards');

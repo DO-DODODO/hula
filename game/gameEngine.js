@@ -57,7 +57,7 @@ function getPublicState(game, viewerCode = null) {
       registered: p.registered,
       avatar: p.avatar,
       singlePoints: p.userCode === viewerCode ? p.singlePoints : undefined,
-      multiBalance: p.userCode === viewerCode ? p.multiBalance : undefined
+      multiBalance: p.isAI ? undefined : p.multiBalance
     })),
     deck: { count: game.deck.length },
     discardPile: (() => {
