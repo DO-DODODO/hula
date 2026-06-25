@@ -664,7 +664,20 @@ io.on('connection', (socket) => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
     const me = await db.getUser(sess.userCode);
-    if (!me?.isAdmin) return;
+    if (!me) return;
+
+    // 비관리자는 자신의 싱글 게임만 중단 가능
+    if (!me.isAdmin) {
+      const singleGame = singleGames.get(sess.userCode);
+      if (singleGame) {
+        clearTimer(singleGame);
+        clearThankYouTimeout(singleGame);
+        singleGame.status = 'ended';
+        singleGames.delete(sess.userCode);
+      }
+      socket.emit('gameStopped', {});
+      return;
+    }
 
     if (activeGame) {
       clearTimer(activeGame);

@@ -71,7 +71,7 @@ socket.on('loginSuccess', () => {
   // Multi: server sends gameState automatically
 });
 
-if (isAdmin) {
+if (isAdmin || gameMode === 'single') {
   document.getElementById('admin-controls').style.display = '';
   document.getElementById('btn-admin-stop').onclick = () => {
     if (confirm('게임을 중단하시겠습니까?')) socket.emit('adminStopGame');
