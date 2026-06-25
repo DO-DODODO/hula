@@ -149,8 +149,8 @@ socket.on('actionError', (msg) => {
   if (gameState && gameState.phase === 'action' && lastDrawSource) {
     gameState.phase = 'draw';
     lastDrawSource = null;
-    render();
   }
+  if (gameState) render(); // 항상 UI 상태 동기화 (유령 선택 상태 방지)
   showNotif(msg, 'info');
 });
 socket.on('deckEmpty', () => showNotif('카드 덱이 소진됐습니다! 이번 버림 후 카드 합산으로 순위 결정', 'info'));
