@@ -300,10 +300,8 @@ function cancelConfirmedThankYou(game, playerCode) {
 
   player.hand = player.hand.filter(c => c.id !== card.id);
 
-  // 카드를 버린더미에 올림 (땡큐 창 재활성화 없이 C 차례로 이어서 진행)
-  game.discardPile.push(card);
-  game.discardPileHidden = false;
-  game.thankYou = { active: false, lock: null, card: null, discarderCode: null };
+  // 카드를 다시 버린 더미 맨 위로 올리고 땡큐 재활성화
+  game.thankYou = { active: true, lock: null, card, discarderCode };
 
   game.thankYouTaker = null;
   game.thankYouTakerCard = null;

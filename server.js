@@ -787,6 +787,33 @@ io.on('connection', (socket) => {
       game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
     }
 
+    // 재땡큐 가능: AI들에게 다시 땡큐 기회 부여
+    if (game.thankYou.active) {
+      const discarderCode = game.thankYou.discarderCode;
+      const card = game.thankYou.card;
+      const cur = getCurrentPlayer(game);
+      for (const p of game.players) {
+        if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
+        const useful = isCardUseful(card, p.hand, game.combos, p.registered);
+        const d = 3000 + Math.random() * 4000;
+        if (useful && Math.random() < 0.6) {
+          setTimeout(() => {
+            if (!game.thankYou.active || game.thankYou.lock) return;
+            const r = tryThankYou(game, p.userCode);
+            if (r.ok) {
+              const cty = confirmThankYou(game, p.userCode);
+              broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
+              setTimeout(() => {
+                broadcastGame(game);
+                startTimer(game);
+                setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+              }, 600);
+            }
+          }, d);
+        }
+      }
+    }
+
     // 원래 차례 플레이어(버린 사람 다음 순번) 타이머 시작
     const cur = getCurrentPlayer(game);
     startTimer(game);

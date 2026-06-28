@@ -238,7 +238,7 @@ function getSortedHand(hand) {
 
 function renderMyArea(me) {
   if (!me) return;
-  const isCurrent = gameState.currentPlayerCode === userCode && !gameState.thankYou?.active;
+  const isCurrent = gameState.currentPlayerCode === userCode;
   const phase = gameState.phase;
 
   const myAvatar = AVATAR_MAP[me.avatar] || '👤';
