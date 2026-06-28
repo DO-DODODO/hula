@@ -297,6 +297,7 @@ function cancelConfirmedThankYou(game, playerCode) {
   if (game.thankYouTaker !== playerCode) return { ok: false };
   const player = game.players.find(p => p.userCode === playerCode);
   const card = game.thankYouTakerCard;
+  const discarderCode = game.thankYouDisplacedDiscarder;
 
   player.hand = player.hand.filter(c => c.id !== card.id);
 
