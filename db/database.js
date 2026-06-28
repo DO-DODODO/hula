@@ -142,6 +142,10 @@ async function chargeBalance(userCode, mode) {
   const user = await getUser(userCode);
   if (!user) return { ok: false, msg: '유저 없음' };
 
+  // 잔액/포인트가 0일 때만 충전 가능
+  if (mode === 'multi' && user.multiBalance > 0) return { ok: false, msg: '멀티 잔액이 0원일 때만 충전 가능합니다' };
+  if (mode === 'single' && user.singlePoints > 0) return { ok: false, msg: '싱글 포인트가 0점일 때만 충전 가능합니다' };
+
   const lastKey = mode === 'multi' ? 'lastMultiCharge' : 'lastSingleCharge';
   const last = user[lastKey];
   if (now - last < 24 * 60 * 60 * 1000) {

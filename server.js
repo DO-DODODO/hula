@@ -84,32 +84,9 @@ function handleTimeout(game) {
 
     setTimeout(() => {
       broadcastGame(game);
-      if (game.thankYou.active) {
-        const discarderCode = game.thankYou.discarderCode;
-        const card = game.thankYou.card;
-        const cur = getCurrentPlayer(game);
-        for (const p of game.players) {
-          if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
-          const useful = isCardUseful(card, p.hand, game.combos, p.registered);
-          const d = 3000 + Math.random() * 4000;
-          if (useful && Math.random() < 0.7) {
-            setTimeout(() => {
-              if (!game.thankYou.active || game.thankYou.lock) return;
-              const r = tryThankYou(game, p.userCode);
-              if (r.ok) {
-                const cty = confirmThankYou(game, p.userCode);
-                broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
-                setTimeout(() => {
-                  broadcastGame(game);
-                  startTimer(game);
-                  setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
-                }, 600);
-              }
-            }, d);
-          }
-        }
-        if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
-      }
+      const cur = getCurrentPlayer(game);
+      startTimer(game);
+      if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
     }, 1200);
 
     // 정산 때 반영 (pendingChanges에 기록)
@@ -789,7 +766,6 @@ io.on('connection', (socket) => {
     const game = getPlayerGame(sess.userCode);
     if (!game) return;
 
-    // 확정 후 취소 (내 턴에 취소 버튼 누름)
     const result = cancelConfirmedThankYou(game, sess.userCode);
     if (!result.ok) return;
 
@@ -797,48 +773,21 @@ io.on('connection', (socket) => {
     const others = game.players.filter(p => p.userCode !== sess.userCode);
     const penalty = unit * others.length;
 
-    // 1. 벌금 알림 먼저
+    // 벌금 알림 먼저
     for (const p of game.players) {
       if (!p.isAI) emitToPlayer(p.userCode, 'thankYouCancelled', { cancellerCode: sess.userCode, penalty, gain: unit });
     }
 
-    // 2. 카드/차례 변경은 잠깐 후에 (알림이 먼저 보이도록)
+    // 카드/차례 변경은 잠깐 후에 (알림이 먼저 보이도록)
     setTimeout(() => broadcastGame(game), 1200);
 
-    // 3. 정산 때 반영 (pendingChanges에 기록)
+    // 정산 때 반영
     game.pendingChanges[sess.userCode] = (game.pendingChanges[sess.userCode] || 0) - penalty;
     for (const p of others) {
       game.pendingChanges[p.userCode] = (game.pendingChanges[p.userCode] || 0) + unit;
     }
 
-    // 재땡큐 가능: AI들에게 다시 땡큐 기회 부여
-    if (game.thankYou.active) {
-      const discarderCode = game.thankYou.discarderCode;
-      const card = game.thankYou.card;
-      const cur = getCurrentPlayer(game);
-      for (const p of game.players) {
-        if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
-        const useful = isCardUseful(card, p.hand, game.combos, p.registered);
-        const d = 3000 + Math.random() * 4000;
-        if (useful && Math.random() < 0.6) {
-          setTimeout(() => {
-            if (!game.thankYou.active || game.thankYou.lock) return;
-            const r = tryThankYou(game, p.userCode);
-            if (r.ok) {
-              const cty = confirmThankYou(game, p.userCode);
-              broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
-              setTimeout(() => {
-                broadcastGame(game);
-                startTimer(game);
-                setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
-              }, 600);
-            }
-          }, d);
-        }
-      }
-    }
-
-    // 원래 차례 플레이어 타이머 시작
+    // 원래 차례 플레이어(버린 사람 다음 순번) 타이머 시작
     const cur = getCurrentPlayer(game);
     startTimer(game);
     if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
