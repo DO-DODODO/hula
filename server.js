@@ -125,26 +125,25 @@ function activateThankYouWindow(game, card) {
     broadcastLog(game, `${cur.userName} 생각 중...`);
     startTimer(game);
 
-    // 현재 플레이어·버린 플레이어 제외한 다른 AI가 땡큐 고려 (3~7초 랜덤)
+    // 현재 플레이어·버린 플레이어 제외한 다른 AI가 땡큐 고려 (1.5~5초 랜덤 대기 후, 그 시점에 판단)
     for (const p of game.players) {
       if (!p.isAI || p.userCode === cur.userCode || p.userCode === discarderCode) continue;
-      const useful = isCardUseful(card, p.hand, game.combos, p.registered);
       const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
-      if (useful && Math.random() < 0.95) {
-        setTimeout(() => {
-          if (!game.thankYou.active || game.thankYou.lock) return;
-          const r = tryThankYou(game, p.userCode);
-          if (r.ok) {
-            const cty = confirmThankYou(game, p.userCode);
-            broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
-            setTimeout(() => {
-              broadcastGame(game);
-              startTimer(game);
-              setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
-            }, 600);
-          }
-        }, d);
-      }
+      setTimeout(() => {
+        if (!game.thankYou.active || game.thankYou.lock) return;
+        const useful = isCardUseful(card, p.hand, game.combos, p.registered);
+        if (!useful) return;
+        const r = tryThankYou(game, p.userCode);
+        if (r.ok) {
+          const cty = confirmThankYou(game, p.userCode);
+          broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
+          setTimeout(() => {
+            broadcastGame(game);
+            startTimer(game);
+            setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+          }, 600);
+        }
+      }, d);
     }
 
     // 현재 플레이어가 AI면 드로우 (2~5초 랜덤 → 땡큐와 타이밍 겹침)
@@ -794,23 +793,22 @@ io.on('connection', (socket) => {
       const cur = getCurrentPlayer(game);
       for (const p of game.players) {
         if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
-        const useful = isCardUseful(card, p.hand, game.combos, p.registered);
-        const d = 3000 + Math.random() * 4000;
-        if (useful && Math.random() < 0.6) {
-          setTimeout(() => {
-            if (!game.thankYou.active || game.thankYou.lock) return;
-            const r = tryThankYou(game, p.userCode);
-            if (r.ok) {
-              const cty = confirmThankYou(game, p.userCode);
-              broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
-              setTimeout(() => {
-                broadcastGame(game);
-                startTimer(game);
-                setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
-              }, 600);
-            }
-          }, d);
-        }
+        const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
+        setTimeout(() => {
+          if (!game.thankYou.active || game.thankYou.lock) return;
+          const useful = isCardUseful(card, p.hand, game.combos, p.registered);
+          if (!useful) return;
+          const r = tryThankYou(game, p.userCode);
+          if (r.ok) {
+            const cty = confirmThankYou(game, p.userCode);
+            broadcastThankYouAnnounce(game, p.userCode, p.userName, cty.card);
+            setTimeout(() => {
+              broadcastGame(game);
+              startTimer(game);
+              setTimeout(() => runAITurn(game, p), 2000 + Math.random() * 1000);
+            }, 600);
+          }
+        }, d);
       }
     }
 
