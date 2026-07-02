@@ -23,10 +23,9 @@ const AVATAR_MAP = {
 
 // 싱글 1등 = 👑, 멀티 1등 = 💎 (둘 다면 같이 표시)
 function rankBadgeHtml(p) {
-  let icons = '';
-  if (p.isRank1Single) icons += '<span class="badge-icon">👑</span>';
-  if (p.isRank1Multi) icons += '<span class="badge-icon">💎</span>';
-  return icons;
+  // 지금 하고 있는 모드에 해당하는 뱃지만 표시 (다른 모드 1등이어도 안 보임)
+  if (gameMode === 'multi') return p.isRank1Multi ? '<span class="badge-icon">💎</span>' : '';
+  return p.isRank1Single ? '<span class="badge-icon">👑</span>' : '';
 }
 
 let gameState = null;
