@@ -17,6 +17,26 @@ button, .pile, .card-slot, .card { touch-action: manipulation; }
 
 html, body { width: 100%; height: 100%; overflow: hidden; background: var(--green-dark); font-family: 'Malgun Gothic', sans-serif; }
 
+/* ── 네트워크 연결 끊김 배너 ─────────────────────────────────────────── */
+#network-banner {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 9999;
+  background: #c0392b;
+  color: #fff;
+  text-align: center;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+#network-banner.show { display: block; animation: networkPulse 1s ease-in-out infinite alternate; }
+@keyframes networkPulse {
+  from { background: #c0392b; }
+  to   { background: #e74c3c; }
+}
+
 /* ── Screens ─────────────────────────────────────────────────────────── */
 .screen { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; align-items: center; justify-content: center; }
 .screen.active { display: flex; }

@@ -60,7 +60,11 @@ if (savedCode && !wasKicked) {
 }
 
 socket.on('connect', () => {
+  document.getElementById('network-banner')?.classList.remove('show');
   if (savedCode && me) socket.emit('login', { userCode: savedCode });
+});
+socket.on('disconnect', () => {
+  document.getElementById('network-banner')?.classList.add('show');
 });
 
 function updateMainScreen() {

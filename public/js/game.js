@@ -79,7 +79,11 @@ document.addEventListener('visibilitychange', async () => {
 // ── Init ───────────────────────────────────────────────────────────────
 // connect는 최초 연결 + 재연결 모두 발생하므로 여기서 login 전송
 socket.on('connect', () => {
+  document.getElementById('network-banner')?.classList.remove('show');
   socket.emit('login', { userCode });
+});
+socket.on('disconnect', () => {
+  document.getElementById('network-banner')?.classList.add('show');
 });
 
 let initialConnectDone = false;

@@ -258,10 +258,9 @@ async function runAITurn(game, aiPlayer) {
             broadcastLog(game, `${aiPlayer.userName} 땡큐 취소 (벌금 부과)`);
             setTimeout(() => {
               broadcastGame(game);
-              if (game.thankYou.active) {
-                const cur = getCurrentPlayer(game);
-                if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
-              }
+              const cur = getCurrentPlayer(game);
+              startTimer(game);
+              if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
             }, 1200);
           }
           return;
