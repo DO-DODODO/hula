@@ -60,10 +60,10 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .ranking-tabs { display: flex; gap: 8px; }
 .tab-btn { padding: 8px 20px; border-radius: 6px 6px 0 0; border: none; cursor: pointer; background: rgba(255,255,255,0.15); color: #fff; }
 .tab-btn.active { background: var(--gold); color: #111; font-weight: bold; }
-.ranking-list { overflow-y: auto; max-height: 50vh; }
-.ranking-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.ranking-list th { background: rgba(255,255,255,0.1); padding: 6px 8px; text-align: center; color: var(--gold); }
-.ranking-list td { padding: 6px 8px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.ranking-list { overflow: auto; max-height: 50vh; }
+.ranking-list table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ranking-list th { background: rgba(255,255,255,0.1); padding: 6px 4px; text-align: center; color: var(--gold); white-space: nowrap; }
+.ranking-list td { padding: 6px 4px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08); white-space: nowrap; }
 .rank-name-cell { display: grid; grid-template-columns: 18px auto; align-items: center; justify-content: center; gap: 4px; }
 .rank-name-cell .badge-icon { text-align: right; margin-right: 0; }
 
@@ -92,16 +92,16 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 }
 
 /* ── Player Areas ────────────────────────────────────────────────────── */
-.player-area { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
+.player-area { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px; min-width: 0; }
 .player-area.top { grid-area: top; }
 .player-area.left { grid-area: left; justify-content: center; }
 .player-area.right { grid-area: right; justify-content: center; }
 
-.player-info { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.player-name { font-size: clamp(12px, 1.4vw, 18px); color: #fff; font-weight: bold; text-align: center; }
+.player-info { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; min-width: 0; }
+.player-name { font-size: clamp(12px, 1.4vw, 18px); color: #fff; font-weight: bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .badge-icon { margin-right: 2px; }
-.player-balance { font-size: clamp(10px, 1.1vw, 14px); color: var(--gold); }
-.player-registered { font-size: clamp(10px, 1.1vw, 14px); color: #4caf50; min-height: 14px; }
+.player-balance { font-size: clamp(10px, 1.1vw, 14px); color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.player-registered { font-size: clamp(10px, 1.1vw, 14px); color: #4caf50; min-height: 14px; white-space: nowrap; }
 .player-cards { display: flex; gap: -4px; margin-top: 4px; }
 
 .player-area.active .player-info {
@@ -222,8 +222,8 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 /* ── My Area ─────────────────────────────────────────────────────────── */
 #my-area { grid-area: my; display: flex; align-items: center; padding: 4px 8px; gap: 6px; background: rgba(0,0,0,0.25); }
 
-#my-info { display: flex; flex-direction: column; align-items: center; min-width: 60px; }
-.my-character { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 8px; }
+#my-info { display: flex; flex-direction: column; align-items: center; min-width: 60px; max-width: 140px; }
+.my-character { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 8px; min-width: 0; max-width: 100%; }
 .my-character.active {
   background: rgba(255,215,0,0.3);
   box-shadow: 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,215,0,0.4);
@@ -231,9 +231,9 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   border-radius: 10px;
   animation: turnPulse 1s ease-in-out infinite alternate;
 }
-#my-name { font-size: clamp(12px, 1.4vw, 18px); color: #fff; font-weight: bold; }
-#my-balance { font-size: clamp(11px, 1.2vw, 15px); color: var(--gold); }
-#my-registered { font-size: clamp(11px, 1.2vw, 15px); color: #4caf50; min-height: 14px; }
+#my-name { font-size: clamp(12px, 1.4vw, 18px); color: #fff; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+#my-balance { font-size: clamp(11px, 1.2vw, 15px); color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+#my-registered { font-size: clamp(11px, 1.2vw, 15px); color: #4caf50; min-height: 14px; white-space: nowrap; }
 
 #timer-area { display: flex; align-items: center; justify-content: center; }
 #timer-svg { width: clamp(44px, 5vw, 70px); height: clamp(44px, 5vw, 70px); }
