@@ -36,7 +36,8 @@ function createGame(mode, players) {
     timerStart: null,
     firstTurn: true,
     rank1Single: null,
-    rank1Multi: null
+    rank1Multi: null,
+    paused: false
   };
 }
 
@@ -49,6 +50,7 @@ function getPublicState(game, viewerCode = null) {
     id: game.id,
     mode: game.mode,
     status: game.status,
+    paused: !!game.paused,
     players: game.players.map(p => ({
       userCode: p.userCode,
       userName: p.userName,

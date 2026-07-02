@@ -104,8 +104,17 @@
 
     <!-- Admin controls -->
     <div id="admin-controls" style="display:none">
-      <button id="btn-admin-stop" class="btn-danger">게임 중단</button>
+      <button id="btn-pause" class="icon-btn pause" style="display:none">❚❚</button>
+      <button id="btn-admin-stop" class="icon-btn stop">✕</button>
     </div>
+  </div>
+
+  <!-- 일시정지 오버레이 (싱글모드) -->
+  <div id="pause-overlay">
+    <div class="pause-icon">❚❚</div>
+    <div class="pause-title">일시정지 중</div>
+    <div class="pause-desc">게임이 멈춰있어요. 준비되면 재개를 눌러주세요.</div>
+    <button id="btn-resume" class="btn-resume">▶ 재개</button>
   </div>
 
   <!-- Attach target selector modal -->

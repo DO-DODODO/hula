@@ -2,7 +2,7 @@
 button, .pile, .card-slot, .card { touch-action: manipulation; }
 
 :root {
-  --green: #1a6b3a;
+  --green: #2fa85f;
   --green-dark: #134d2b;
   --gold: #c9a84c;
   --card-bg: #fff;
@@ -128,8 +128,9 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   background: rgba(255,215,0,0.3);
   border-radius: 10px;
   padding: 6px 12px;
+  margin: -6px -12px;
   box-shadow: 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,215,0,0.4);
-  border: 2px solid rgba(255,215,0,0.7);
+  outline: 2px solid rgba(255,215,0,0.7);
   animation: turnPulse 1s ease-in-out infinite alternate;
 }
 @keyframes turnPulse {
@@ -143,8 +144,10 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 #combos-area { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: flex-start; flex: 1; overflow-y: auto; width: 100%; }
 
 #piles-area { display: flex; align-items: center; gap: 12px; }
-.pile { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.pile-label { font-size: 10px; color: var(--text-dim); }
+/* pile-label을 absolute로 빼서 pile의 정렬 기준 높이가 카드 자체(라벨 제외)가 되게 함
+   → #piles-area의 align-items:center가 카드/버튼을 정확히 카드 세로중앙으로 맞춤 */
+.pile { display: flex; flex-direction: column; align-items: center; gap: 3px; position: relative; }
+.pile-label { font-size: 10px; color: var(--text-dim); position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px; white-space: nowrap; }
 
 /* ── Cards ───────────────────────────────────────────────────────────── */
 /* 터치 타깃 래퍼 - 선택해도 위치 안 변함 */
@@ -232,12 +235,14 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 /* ── Thank You Button ────────────────────────────────────────────────── */
 .btn-thankyou {
-  padding: 10px 14px; background: var(--btn-danger); color: #fff;
-  border: none; border-radius: 8px; font-size: 14px; font-weight: bold;
-  cursor: pointer; transition: all 0.2s;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ff8a8a, var(--btn-danger) 70%);
+  color: #fff; border: none; font-size: 13px; font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; flex-shrink: 0;
 }
 .btn-thankyou:not(:disabled) { animation: pulse 0.8s infinite alternate; }
-@keyframes pulse { from { box-shadow: 0 0 4px #c0392b; } to { box-shadow: 0 0 16px #ff6b6b; } }
+@keyframes pulse { from { box-shadow: 0 0 6px #c0392b; } to { box-shadow: 0 0 18px #ff6b6b; } }
 
 /* ── My Area ─────────────────────────────────────────────────────────── */
 #my-area { grid-area: my; display: flex; align-items: center; padding: 4px 8px; gap: 6px; background: rgba(0,0,0,0.25); }
@@ -249,7 +254,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .my-character.active {
   background: rgba(255,215,0,0.3);
   box-shadow: 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,215,0,0.4);
-  border: 2px solid rgba(255,215,0,0.7);
+  outline: 2px solid rgba(255,215,0,0.7);
   border-radius: 10px;
   animation: turnPulse 1s ease-in-out infinite alternate;
 }
@@ -288,56 +293,40 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 /* ── ThankYou Bubble ─────────────────────────────────────────────────── */
 .thankyou-bubble {
   position: absolute;
-  background: rgba(220, 50, 50, 0.93);
-  color: #fff;
-  font-size: clamp(14px, 1.8vw, 22px);
+  background: #ffe0cc;
+  color: #d9591f;
+  font-size: clamp(12px, 1.6vw, 18px);
   font-weight: bold;
-  padding: 5px 14px;
-  border-radius: 20px;
+  padding: 5px 12px;
+  border-radius: 16px;
   white-space: nowrap;
   z-index: 150;
   pointer-events: none;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.3);
 }
-.thankyou-bubble.cancel {
-  background: rgba(80, 80, 80, 0.93);
-}
-.thankyou-bubble.cancel-popup {
-  animation: cancelPop 0.25s ease, cancelFade 0.5s ease 2s forwards;
-}
-@keyframes cancelPop  { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-@keyframes cancelFade { to   { opacity: 0; transform: scale(0.9) translateY(-6px); } }
-/* 위(above, 기본) */
-.thankyou-bubble[data-dir="above"] {
-  bottom: calc(100% + 10px); left: 50%;
-  transform: translateX(-50%);
-  animation: bubbleAbovePop 0.25s ease, bubbleAboveFade 0.5s ease 2s forwards;
-}
-/* 아래(below) - 위 플레이어 */
+/* 아래(below) - 위쪽 캐릭터 전용, 가운데 정렬 */
 .thankyou-bubble[data-dir="below"] {
   top: 100%; left: 50%;
   transform: translateX(-50%);
+  margin-top: 10px;
   animation: bubbleBelowPop 0.25s ease, bubbleBelowFade 0.5s ease 2s forwards;
 }
-/* 오른쪽(right) - 왼쪽 플레이어 */
-.thankyou-bubble[data-dir="right"] {
-  top: 50%; left: 100%;
-  transform: translateY(-50%);
-  animation: bubbleRightPop 0.25s ease, bubbleRightFade 0.5s ease 2s forwards;
+/* 위 + 왼쪽 기준(오른쪽으로 자람) - 왼쪽 캐릭터, 나 */
+.thankyou-bubble[data-dir="above-left"] {
+  bottom: 100%; left: 0;
+  margin-bottom: 10px;
+  animation: bubblePopLR 0.25s ease, bubbleFadeLR 0.5s ease 2s forwards;
 }
-/* 왼쪽(left) - 오른쪽 플레이어 */
-.thankyou-bubble[data-dir="left"] {
-  top: 50%; right: 100%;
-  transform: translateY(-50%);
-  animation: bubbleLeftPop 0.25s ease, bubbleLeftFade 0.5s ease 2s forwards;
+/* 위 + 오른쪽 기준(왼쪽으로 자람) - 오른쪽 캐릭터 */
+.thankyou-bubble[data-dir="above-right"] {
+  bottom: 100%; right: 0;
+  margin-bottom: 10px;
+  animation: bubblePopLR 0.25s ease, bubbleFadeLR 0.5s ease 2s forwards;
 }
-@keyframes bubbleAbovePop  { from { transform: translateX(-50%) scale(0.4); opacity:0; } to { transform: translateX(-50%) scale(1); opacity:1; } }
-@keyframes bubbleAboveFade { to   { opacity:0; transform: translateX(-50%) translateY(-8px); } }
 @keyframes bubbleBelowPop  { from { transform: translateX(-50%) scale(0.4); opacity:0; } to { transform: translateX(-50%) scale(1); opacity:1; } }
 @keyframes bubbleBelowFade { to   { opacity:0; transform: translateX(-50%) translateY(8px); } }
-@keyframes bubbleRightPop  { from { transform: translateY(-50%) scale(0.4); opacity:0; } to { transform: translateY(-50%) scale(1); opacity:1; } }
-@keyframes bubbleRightFade { to   { opacity:0; transform: translateY(-50%) translateX(8px); } }
-@keyframes bubbleLeftPop   { from { transform: translateY(-50%) scale(0.4); opacity:0; } to { transform: translateY(-50%) scale(1); opacity:1; } }
-@keyframes bubbleLeftFade  { to   { opacity:0; transform: translateY(-50%) translateX(-8px); } }
+@keyframes bubblePopLR  { from { transform: scale(0.4); opacity:0; } to { transform: scale(1); opacity:1; } }
+@keyframes bubbleFadeLR { to   { opacity:0; transform: translateY(-8px); } }
 
 /* 땡큐로 카드 가져간 후 버린더미 이전 카드 */
 .card.discard-old { opacity: 0.5; filter: grayscale(60%); }
@@ -394,7 +383,31 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 @keyframes logFadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; } }
 
 /* ── Admin Controls ──────────────────────────────────────────────────── */
-#admin-controls { position: absolute; top: 8px; right: 8px; }
+#admin-controls { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; z-index: 10; }
+.icon-btn { width: 28px; height: 28px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.icon-btn.pause { background: var(--gold); color: #111; letter-spacing: 2px; padding-left: 2px; }
+.icon-btn.stop { background: var(--btn-danger); color: #fff; }
+
+/* ── Pause Overlay ───────────────────────────────────────────────────── */
+#pause-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 15, 0.97);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  z-index: 2000;
+  color: #fff;
+  text-align: center;
+  padding: 20px;
+}
+#pause-overlay.show { display: flex; }
+.pause-icon { font-size: 48px; color: var(--gold); }
+.pause-title { font-size: 22px; font-weight: bold; }
+.pause-desc { font-size: 14px; color: rgba(255,255,255,0.7); }
+.btn-resume { padding: 14px 32px; background: var(--gold); color: #111; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; }
 
 /* ── Notifications ───────────────────────────────────────────────────── */
 #notifications { position: fixed; top: 40%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 200; pointer-events: none; }

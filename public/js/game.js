@@ -102,6 +102,13 @@ if (isAdmin || gameMode === 'single') {
   };
 }
 
+// 일시정지: 싱글모드에서만 노출
+if (gameMode === 'single') {
+  document.getElementById('btn-pause').style.display = '';
+  document.getElementById('btn-pause').onclick = () => socket.emit('pauseGame');
+  document.getElementById('btn-resume').onclick = () => socket.emit('resumeGame');
+}
+
 // ── Game State ─────────────────────────────────────────────────────────
 socket.on('gameState', (state) => {
   requestWakeLock();
@@ -125,6 +132,13 @@ socket.on('gameState', (state) => {
   prevThankYouActive = newThankYouActive;
 
   gameState = state;
+
+  // 일시정지 화면 표시/해제 (재접속 시에도 서버 상태 기준으로 정확히 복원됨)
+  const pauseOverlay = document.getElementById('pause-overlay');
+  if (pauseOverlay) {
+    pauseOverlay.classList.toggle('show', !!state.paused);
+    if (state.paused) releaseWakeLock(); else requestWakeLock();
+  }
   if (myFixedSeat === null) {
     const me = state.players.find(p => p.userCode === userCode);
     if (me !== undefined) myFixedSeat = me.seatIndex;
@@ -681,7 +695,7 @@ document.getElementById('btn-cancel-confirm-yes').onclick = () => {
 };
 
 socket.on('thankYouCancelled', ({ cancellerCode, penalty, gain, auto }) => {
-  showBubble(cancellerCode, '땡큐 취소! 😭', true);
+  showBubble(cancellerCode, '땡큐 취소! 😭');
   const unit = gameMode === 'multi' ? '원' : 'pt';
   if (cancellerCode === userCode) {
     if (auto) {
@@ -901,42 +915,19 @@ function getPlayerEl(playerCode) {
   return null;
 }
 
-function showBubble(playerCode, text, isCancel = false) {
+function showBubble(playerCode, text) {
   const targetEl = getPlayerEl(playerCode);
   if (!targetEl) return;
 
   const bubble = document.createElement('div');
   bubble.textContent = text;
-
-  if (isCancel) {
-    bubble.className = 'thankyou-bubble cancel cancel-popup';
-    bubble.style.position = 'fixed';
-    bubble.style.visibility = 'hidden';
-    bubble.style.top = '-9999px';
-    document.body.appendChild(bubble);
-
-    const bw = bubble.offsetWidth;
-    const bh = bubble.offsetHeight;
-    const rect = targetEl.getBoundingClientRect();
-    const isTop = targetEl.id === 'player-top';
-
-    let top = isTop ? rect.bottom + 10 : rect.top - bh - 10;
-    let left = rect.left + rect.width / 2 - bw / 2;
-    left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
-    top = Math.max(8, Math.min(top, window.innerHeight - bh - 8));
-
-    bubble.style.top = top + 'px';
-    bubble.style.left = left + 'px';
-    bubble.style.visibility = 'visible';
-  } else {
-    bubble.className = 'thankyou-bubble';
-    if (targetEl.id === 'player-top') bubble.dataset.dir = 'below';
-    else if (targetEl.id === 'player-left') bubble.dataset.dir = 'right';
-    else if (targetEl.id === 'player-right') bubble.dataset.dir = 'left';
-    else bubble.dataset.dir = 'above';
-    targetEl.style.position = 'relative';
-    targetEl.appendChild(bubble);
-  }
+  bubble.className = 'thankyou-bubble';
+  // 위쪽 캐릭터는 아래로, 나머지(왼쪽/나=왼쪽기준, 오른쪽=오른쪽기준)는 위로 - 화면 밖으로 안 잘리게
+  if (targetEl.id === 'player-top') bubble.dataset.dir = 'below';
+  else if (targetEl.id === 'player-right') bubble.dataset.dir = 'above-right';
+  else bubble.dataset.dir = 'above-left';
+  targetEl.style.position = 'relative';
+  targetEl.appendChild(bubble);
 
   setTimeout(() => bubble.remove(), 2500);
 }

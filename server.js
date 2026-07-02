@@ -72,6 +72,7 @@ function clearTimer(game) {
 }
 
 function handleTimeout(game) {
+  if (game.paused) return;
   const player = getCurrentPlayer(game);
   if (!player || player.isAI) return;
 
@@ -125,7 +126,7 @@ function activateThankYouWindow(game, card) {
 
   setTimeout(() => {
     broadcastGame(game);
-
+    if (game.paused) return;
 
     const cur = getCurrentPlayer(game);
     if (!cur) return;
@@ -137,7 +138,7 @@ function activateThankYouWindow(game, card) {
       if (!p.isAI || p.userCode === cur.userCode || p.userCode === discarderCode) continue;
       const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
       setTimeout(() => {
-        if (!game.thankYou.active || game.thankYou.lock) return;
+        if (!game.thankYou.active || game.thankYou.lock || game.paused) return;
         const useful = isCardUseful(card, p.hand, game.combos, p.registered);
         if (!useful) return;
         const r = tryThankYou(game, p.userCode);
@@ -185,6 +186,7 @@ function advanceTurn(game, winnerCode = null) {
 
 async function runAITurn(game, aiPlayer) {
   if (game.status !== 'playing') return;
+  if (game.paused) return;
   if (getCurrentPlayer(game)?.userCode !== aiPlayer.userCode) return;
   if (!aiPlayer.isAI) return;
 
@@ -772,6 +774,30 @@ io.on('connection', (socket) => {
     activateThankYouWindow(game, result.card);
   });
 
+  // 일시정지 (싱글모드 전용) - 타이머/AI 진행을 멈추고 클라이언트가 일시정지 화면을 덮게 함
+  socket.on('pauseGame', () => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    const game = getPlayerGame(sess.userCode);
+    if (!game || game.mode !== 'single' || game.status !== 'playing') return;
+    game.paused = true;
+    clearTimer(game);
+    clearThankYouTimeout(game);
+    broadcastGame(game);
+  });
+
+  socket.on('resumeGame', () => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    const game = getPlayerGame(sess.userCode);
+    if (!game || game.mode !== 'single' || game.status !== 'playing') return;
+    game.paused = false;
+    broadcastGame(game);
+    const cur = getCurrentPlayer(game);
+    startTimer(game);
+    if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
+  });
+
   socket.on('thankYou', () => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
@@ -825,7 +851,7 @@ io.on('connection', (socket) => {
         if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
         const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
         setTimeout(() => {
-          if (!game.thankYou.active || game.thankYou.lock) return;
+          if (!game.thankYou.active || game.thankYou.lock || game.paused) return;
           const useful = isCardUseful(card, p.hand, game.combos, p.registered);
           if (!useful) return;
           const r = tryThankYou(game, p.userCode);
