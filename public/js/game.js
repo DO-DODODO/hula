@@ -33,7 +33,7 @@ let prevThankYouActive = false;
 let wakeLock = null;
 let selectedCards = new Set();
 let timerInterval = null;
-let timerSeconds = 60;
+let timerSeconds = 45;
 let thankYouLocked = false;
 let attachMode = false;
 let myFixedSeat = null;
@@ -698,18 +698,18 @@ function updateTimer() {
 
   // 내 차례가 아니면 카운트다운 안 함
   if (!isMyTurn()) {
-    timerSeconds = 60;
-    text.textContent = '60';
+    timerSeconds = 45;
+    text.textContent = '45';
     circle.style.strokeDashoffset = '0';
     circle.classList.remove('urgent');
     return;
   }
 
-  timerSeconds = 60;
+  timerSeconds = 45;
 
   function tick() {
     text.textContent = timerSeconds;
-    const offset = circumference * (1 - timerSeconds / 60);
+    const offset = circumference * (1 - timerSeconds / 45);
     circle.style.strokeDashoffset = offset;
     circle.classList.toggle('urgent', timerSeconds <= 15);
     if (timerSeconds <= 0) clearInterval(timerInterval);

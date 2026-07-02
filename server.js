@@ -61,7 +61,7 @@ async function snapshotRank1(game) {
 
 // ── Timer ──────────────────────────────────────────────────────────────────
 
-function startTimer(game, durationMs = 60000) {
+function startTimer(game, durationMs = 45000) {
   clearTimer(game);
   game.timerStart = Date.now();
   game.timer = setTimeout(() => handleTimeout(game), durationMs);
