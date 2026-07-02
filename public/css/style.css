@@ -87,7 +87,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
     "left center right"
     "my my my";
   grid-template-rows: 20% 42% 38%;
-  grid-template-columns: 16% 68% 16%;
+  grid-template-columns: 20% 60% 20%;
   position: relative;
 }
 
@@ -222,7 +222,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 /* ── My Area ─────────────────────────────────────────────────────────── */
 #my-area { grid-area: my; display: flex; align-items: center; padding: 4px 8px; gap: 6px; background: rgba(0,0,0,0.25); }
 
-#my-info { display: flex; flex-direction: column; align-items: center; min-width: 60px; max-width: 140px; }
+#my-info { display: flex; flex-direction: column; align-items: center; min-width: 60px; max-width: 190px; }
 .my-character { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 8px; min-width: 0; max-width: 100%; }
 .my-character.active {
   background: rgba(255,215,0,0.3);
