@@ -64,6 +64,8 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .ranking-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ranking-list th { background: rgba(255,255,255,0.1); padding: 6px 8px; text-align: center; color: var(--gold); }
 .ranking-list td { padding: 6px 8px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.rank-name-cell { display: grid; grid-template-columns: 18px auto; align-items: center; justify-content: center; gap: 4px; }
+.rank-name-cell .badge-icon { text-align: right; margin-right: 0; }
 
 /* User list */
 .user-list { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
@@ -97,6 +99,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 .player-info { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .player-name { font-size: clamp(12px, 1.4vw, 18px); color: #fff; font-weight: bold; text-align: center; }
+.badge-icon { margin-right: 2px; }
 .player-balance { font-size: clamp(10px, 1.1vw, 14px); color: var(--gold); }
 .player-registered { font-size: clamp(10px, 1.1vw, 14px); color: #4caf50; min-height: 14px; }
 .player-cards { display: flex; gap: -4px; margin-top: 4px; }
@@ -390,6 +393,38 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 @keyframes winBounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-12px); }
+}
+
+/* ── 1등 등극 뱃지 연출 (승리 화면) ─────────────────────────────────── */
+.rank1-badge-slot { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; }
+.rank1-badge-emoji { position: relative; z-index: 2; font-size: 34px; opacity: 0; transform: scale(0); }
+.rank1-badge-slot.play .rank1-badge-emoji { animation: rank1PopIn 1.3s cubic-bezier(.34,1.2,.4,1) 0.4s forwards; }
+@keyframes rank1PopIn {
+  0%   { opacity: 0; transform: scale(0) rotate(-30deg); }
+  60%  { opacity: 1; transform: scale(1.35) rotate(10deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+.rank1-burst { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border-radius: 50%; transform: translate(-50%, -50%) scale(0); background: radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,230,150,0.9) 25%, rgba(255,215,0,0.4) 50%, rgba(255,215,0,0) 70%); z-index: 1; opacity: 0; }
+.rank1-badge-slot.play .rank1-burst { animation: rank1BurstOut 0.75s ease-out 0.35s forwards; }
+@keyframes rank1BurstOut {
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+  60%  { opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(13); opacity: 0; }
+}
+
+.rank1-rays { position: absolute; top: 50%; left: 50%; width: 65px; height: 65px; transform: translate(-50%, -50%) scale(0) rotate(0deg); background: repeating-conic-gradient(rgba(255,235,150,0.9) 0deg 6deg, rgba(255,235,150,0) 6deg 30deg); border-radius: 50%; opacity: 0; z-index: 1; }
+.rank1-badge-slot.play .rank1-rays { animation: rank1RaysOut 0.95s ease-out 0.35s forwards; }
+@keyframes rank1RaysOut {
+  0%   { transform: translate(-50%, -50%) scale(0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(3) rotate(60deg); opacity: 0; }
+}
+
+.rank1-sub { font-size: 14px; color: #fff; opacity: 0; min-height: 18px; }
+.rank1-sub.play { animation: rank1SubFade 1.4s ease-out 0.6s forwards; }
+@keyframes rank1SubFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 #confetti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 299; }
 .confetti-piece { position: absolute; width: 8px; height: 8px; border-radius: 2px; animation: confettiFall linear forwards; }

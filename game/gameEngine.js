@@ -34,7 +34,9 @@ function createGame(mode, players) {
     pendingChanges: {},
     timer: null,
     timerStart: null,
-    firstTurn: true
+    firstTurn: true,
+    rank1Single: null,
+    rank1Multi: null
   };
 }
 
@@ -57,7 +59,9 @@ function getPublicState(game, viewerCode = null) {
       registered: p.registered,
       avatar: p.avatar,
       singlePoints: p.userCode === viewerCode ? p.singlePoints : undefined,
-      multiBalance: p.isAI ? undefined : p.multiBalance
+      multiBalance: p.isAI ? undefined : p.multiBalance,
+      isRank1Single: !p.isAI && !!game.rank1Single && p.userCode === game.rank1Single,
+      isRank1Multi: !p.isAI && !!game.rank1Multi && p.userCode === game.rank1Multi
     })),
     deck: { count: game.deck.length },
     discardPile: (() => {

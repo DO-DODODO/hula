@@ -140,6 +140,12 @@ const AVATARS = [
   { key: 'wolf',   emoji: '🐺' },
   { key: 'raccoon',emoji: '🦝' },
   { key: 'cow',    emoji: '🐮' },
+  { key: 'chick',  emoji: '🐤' },
+  { key: 'monkey', emoji: '🐵' },
+  { key: 'turtle', emoji: '🐢' },
+  { key: 'dolphin',emoji: '🐬' },
+  { key: 'seal',   emoji: '🦭' },
+  { key: 'sheep',  emoji: '🐑' },
 ];
 
 function renderAvatarGrid(currentAvatar) {
@@ -293,7 +299,7 @@ socket.on('ranking', (data) => {
 });
 function winRate(wins, games) {
   if (!games) return '-';
-  return Math.round((wins / games) * 100) + '%';
+  return Math.round((wins / games) * 100).toLocaleString() + '%';
 }
 
 function renderRanking(mode) {
@@ -313,11 +319,17 @@ function renderRanking(mode) {
       const games = mode === 'multi' ? r.multiGames : r.singleGames;
       const losses = (games ?? 0) - (wins ?? 0);
       const avatarEmoji = (AVATARS.find(a => a.key === r.avatar) || AVATARS[0]).emoji;
+      const rankBadge = i === 0 ? (mode === 'multi' ? '💎' : '👑') : '';
       return `<tr>
         <td>${i + 1}</td>
-        <td>${avatarEmoji} ${r.userName}</td>
-        <td>${mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : r.singlePoints + '점'}</td>
-        <td>${wins ?? 0}승 ${losses}패</td>
+        <td>
+          <div class="rank-name-cell">
+            <span class="badge-icon">${rankBadge}</span>
+            <span>${avatarEmoji} ${r.userName}</span>
+          </div>
+        </td>
+        <td>${mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : (r.singlePoints ?? 0).toLocaleString() + '점'}</td>
+        <td>${(wins ?? 0).toLocaleString()}승 ${losses.toLocaleString()}패</td>
         <td>${winRate(wins ?? 0, games ?? 0)}</td>
       </tr>`;
     }).join('')}</tbody>

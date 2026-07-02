@@ -17,8 +17,17 @@ const AVATAR_MAP = {
   person: '👤', cat: '🐱', bear: '🐻', rabbit: '🐰', fox: '🦊',
   frog: '🐸', panda: '🐼', koala: '🐨', lion: '🦁', hedge: '🦔',
   wolf: '🐺', raccoon: '🦝', cow: '🐮',
+  chick: '🐤', monkey: '🐵', turtle: '🐢', dolphin: '🐬', seal: '🦭', sheep: '🐑',
   pig: '🐷', dog: '🐶', tiger: '🐯'
 };
+
+// 싱글 1등 = 👑, 멀티 1등 = 💎 (둘 다면 같이 표시)
+function rankBadgeHtml(p) {
+  let icons = '';
+  if (p.isRank1Single) icons += '<span class="badge-icon">👑</span>';
+  if (p.isRank1Multi) icons += '<span class="badge-icon">💎</span>';
+  return icons;
+}
 
 let gameState = null;
 let prevThankYouActive = false;
@@ -213,7 +222,7 @@ function renderPlayer(pos, player, comboGrew = false) {
   prevHandCounts.set(player.userCode, player.handCount);
 
   const avatarEmoji = AVATAR_MAP[player.avatar] || (player.isAI ? '🤖' : '👤');
-  el.querySelector('.player-name').textContent = avatarEmoji + ' ' + player.userName;
+  el.querySelector('.player-name').innerHTML = rankBadgeHtml(player) + avatarEmoji + ' ' + player.userName;
   el.querySelector('.player-balance').textContent = gameMode === 'multi' && player.multiBalance !== undefined
     ? `₩${player.multiBalance.toLocaleString()}` : '';
   el.querySelector('.player-registered').textContent = player.registered ? '✓등록' : '';
@@ -242,7 +251,7 @@ function renderMyArea(me) {
   const phase = gameState.phase;
 
   const myAvatar = AVATAR_MAP[me.avatar] || '👤';
-  document.getElementById('my-name').textContent = myAvatar + ' ' + userName;
+  document.getElementById('my-name').innerHTML = rankBadgeHtml(me) + myAvatar + ' ' + userName;
   document.getElementById('my-balance').textContent = gameMode === 'multi'
     ? `₩${(me.multiBalance || 0).toLocaleString?.() || ''}` : `${me.singlePoints || 0}pt`;
   document.getElementById('my-registered').textContent = me.registered ? '✓등록' : '';
@@ -712,7 +721,7 @@ function updateTimer() {
 }
 
 // ── Game End ───────────────────────────────────────────────────────────
-socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage }) => {
+socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1 }) => {
   clearInterval(timerInterval);
   releaseWakeLock();
 
@@ -724,6 +733,23 @@ socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage }) => {
   document.getElementById('win-avatar').textContent = winnerAvatar;
   document.getElementById('win-name').textContent = `${winnerName} 승리!`;
   document.getElementById('win-message').textContent = winMessage || '';
+
+  // 새로 1위 등극 연출 (싱글=👑, 멀티=💎)
+  const badgeSlot = document.getElementById('win-rank1-badge-slot');
+  const badgeEmoji = document.getElementById('win-rank1-badge');
+  const sub = document.getElementById('win-rank1-sub');
+  badgeSlot.classList.remove('play');
+  sub.classList.remove('play');
+  if (newRank1) {
+    badgeEmoji.textContent = newRank1 === 'multi' ? '💎' : '👑';
+    sub.textContent = `🎉 ${newRank1 === 'multi' ? '멀티' : '싱글'}모드 1위 등극!`;
+    void badgeSlot.offsetWidth; // 애니메이션 재시작을 위한 강제 리플로우
+    badgeSlot.classList.add('play');
+    sub.classList.add('play');
+  } else {
+    badgeEmoji.textContent = '';
+    sub.textContent = '';
+  }
 
   launchConfetti(winnerCode);
 
@@ -744,8 +770,8 @@ function showResults(results) {
       const wins = r.totalWins ?? 0;
       const games = r.totalGames ?? 0;
       const losses = games - wins;
-      const record = r.isAI ? '-' : `${wins}승 ${losses}패`;
-      const rate = r.isAI || !games ? '-' : Math.round((wins / games) * 100) + '%';
+      const record = r.isAI ? '-' : `${wins.toLocaleString()}승 ${losses.toLocaleString()}패`;
+      const rate = r.isAI || !games ? '-' : Math.round((wins / games) * 100).toLocaleString() + '%';
       const notes = [];
       if (r.rank !== 1 && r.multiplier === 2) notes.push('미등록×2');
       if (r.thankYouChange) {
@@ -759,7 +785,7 @@ function showResults(results) {
         <td style="color:${r.pointChange >= 0 ? '#4caf50' : '#f44336'}">
           ${r.pointChange >= 0 ? '+' : ''}${r.pointChange?.toLocaleString()}${gameMode === 'multi' ? '원' : 'pt'}
         </td>
-        <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance + 'pt') : '-'}</td>
+        <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance?.toLocaleString() + 'pt') : '-'}</td>
         <td>${record}</td>
         <td>${rate}</td>
         <td style="font-size:0.8em;color:#aaa">${notes.join(' / ') || '-'}</td>

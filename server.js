@@ -52,6 +52,13 @@ function broadcastGame(game) {
   }
 }
 
+// 게임 시작 시점의 전역 1위(싱글 포인트 / 멀티 잔액)를 스냅샷으로 저장 (1등 뱃지, 등극 연출 판단용)
+async function snapshotRank1(game) {
+  const [singleRanking, multiRanking] = await Promise.all([db.getSingleRanking(), db.getMultiRanking()]);
+  game.rank1Single = singleRanking[0]?.userCode ?? null;
+  game.rank1Multi = multiRanking[0]?.userCode ?? null;
+}
+
 // ── Timer ──────────────────────────────────────────────────────────────────
 
 function startTimer(game, durationMs = 60000) {
@@ -337,6 +344,28 @@ async function endGame(game, winnerCode) {
 
   await db.saveGameResult(game.id, game.mode, results);
 
+  // "새로 1위 등극" 판단: 게임 시작 시점 1위 스냅샷과 게임 종료 후 최신 랭킹을 비교
+  // + 게임판(뒤에 깔린 캐릭터 뱃지)도 최신 1위로 즉시 갱신
+  let newRank1 = null; // 'single' | 'multi' | null
+  if (game.mode === 'single') {
+    const ranking = await db.getSingleRanking();
+    const prevRank1 = game.rank1Single;
+    game.rank1Single = ranking[0]?.userCode ?? null;
+    if (actualWinnerCode && game.rank1Single === actualWinnerCode && prevRank1 !== actualWinnerCode) {
+      const winner = game.players.find(p => p.userCode === actualWinnerCode);
+      if (winner && !winner.isAI) newRank1 = 'single';
+    }
+  } else {
+    const ranking = await db.getMultiRanking();
+    const prevRank1 = game.rank1Multi;
+    game.rank1Multi = ranking[0]?.userCode ?? null;
+    if (actualWinnerCode && game.rank1Multi === actualWinnerCode && prevRank1 !== actualWinnerCode) {
+      const winner = game.players.find(p => p.userCode === actualWinnerCode);
+      if (winner && !winner.isAI) newRank1 = 'multi';
+    }
+  }
+  broadcastGame(game); // 뱃지 갱신을 승리 문구 뜨는 시점에 즉시 반영
+
   for (const r of results) {
     if (!r.isAI) {
       const user = await db.getUser(r.userCode);
@@ -353,7 +382,7 @@ async function endGame(game, winnerCode) {
   for (const p of game.players) {
     if (!p.isAI) {
       emitToPlayer(p.userCode, 'gameEnd', {
-        results, winnerCode: actualWinnerCode, winnerName, winMessage
+        results, winnerCode: actualWinnerCode, winnerName, winMessage, newRank1
       });
     }
   }
@@ -540,6 +569,7 @@ io.on('connection', (socket) => {
     }
 
     const game = createGame('single', players);
+    await snapshotRank1(game);
     singleGames.set(user.userCode, game);
     socket.emit('gameState', getPublicState(game, user.userCode));
 
@@ -619,6 +649,7 @@ io.on('connection', (socket) => {
 
     const allPlayers = [...humanPlayers, ...aiPlayers].sort(() => Math.random() - 0.5);
     activeGame = createGame('multi', allPlayers);
+    await snapshotRank1(activeGame);
     waitingRoom.clear();
 
     for (const p of activeGame.players) {
@@ -851,6 +882,7 @@ io.on('connection', (socket) => {
     }));
 
     activeGame = createGame('multi', players);
+    await snapshotRank1(activeGame);
     waitingRoom.clear();
 
     for (const p of activeGame.players) {
