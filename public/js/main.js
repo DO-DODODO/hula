@@ -65,7 +65,7 @@ socket.on('connect', () => {
 
 function updateMainScreen() {
   document.getElementById('main-username').textContent = me.userName;
-  document.getElementById('single-balance').textContent = `${me.singlePoints}점`;
+  document.getElementById('single-balance').textContent = `${me.singlePoints?.toLocaleString()}점`;
   document.getElementById('multi-balance').textContent = `₩${me.multiBalance?.toLocaleString()}`;
 }
 
@@ -167,7 +167,7 @@ function renderAvatarGrid(currentAvatar) {
 
 document.getElementById('btn-settings').onclick = () => {
   document.getElementById('input-win-message').value = me.winMessage || '';
-  document.getElementById('single-points-display').textContent = `${me.singlePoints}점`;
+  document.getElementById('single-points-display').textContent = `${me.singlePoints?.toLocaleString()}점`;
   document.getElementById('multi-balance-display').textContent = `₩${me.multiBalance?.toLocaleString()}`;
   renderAvatarGrid(me.avatar || 'person');
   if (isAdmin) {
@@ -198,9 +198,9 @@ socket.on('chargeResult', (res) => {
   if (res.ok) {
     me.singlePoints = res.singlePoints;
     me.multiBalance = res.multiBalance;
-    document.getElementById('single-points-display').textContent = `${res.singlePoints}점`;
+    document.getElementById('single-points-display').textContent = `${res.singlePoints?.toLocaleString()}점`;
     document.getElementById('multi-balance-display').textContent = `₩${res.multiBalance?.toLocaleString()}`;
-    document.getElementById('settings-msg').textContent = `+${res.amount} 충전 완료!`;
+    document.getElementById('settings-msg').textContent = `+${res.amount?.toLocaleString()} 충전 완료!`;
   } else {
     document.getElementById('settings-msg').textContent = res.msg;
   }

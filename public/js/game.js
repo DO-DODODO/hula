@@ -271,7 +271,7 @@ function renderMyArea(me) {
   fitText(myNameEl);
   const myBalanceEl = document.getElementById('my-balance');
   myBalanceEl.textContent = gameMode === 'multi'
-    ? `₩${(me.multiBalance || 0).toLocaleString?.() || ''}` : `${me.singlePoints || 0}pt`;
+    ? `₩${(me.multiBalance || 0).toLocaleString?.() || ''}` : `${(me.singlePoints || 0).toLocaleString()}pt`;
   fitText(myBalanceEl);
   document.getElementById('my-registered').textContent = me.registered ? '✓등록' : '';
   document.getElementById('my-character').classList.toggle('active', isCurrent);
