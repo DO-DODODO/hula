@@ -2,7 +2,7 @@
 button, .pile, .card-slot, .card { touch-action: manipulation; }
 
 :root {
-  --green: #2fa85f;
+  --green: #1a6b3a;
   --green-dark: #134d2b;
   --gold: #c9a84c;
   --card-bg: #fff;
@@ -127,8 +127,9 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .player-area.active .player-info {
   background: rgba(255,215,0,0.3);
   border-radius: 10px;
-  padding: 6px 12px;
-  margin: -6px -12px;
+  /* 아래쪽은 패(.player-cards)랑 겹치니까 확장 안 시킴, 위/좌/우만 바깥으로 확장 */
+  padding: 6px 12px 0 12px;
+  margin: -6px -12px 0 -12px;
   box-shadow: 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,215,0,0.4);
   outline: 2px solid rgba(255,215,0,0.7);
   animation: turnPulse 1s ease-in-out infinite alternate;
@@ -235,9 +236,9 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 /* ── Thank You Button ────────────────────────────────────────────────── */
 .btn-thankyou {
-  width: 60px; height: 60px; border-radius: 50%;
+  width: 42px; height: 42px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ff8a8a, var(--btn-danger) 70%);
-  color: #fff; border: none; font-size: 13px; font-weight: bold;
+  color: #fff; border: none; font-size: 9px; font-weight: bold;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: all 0.2s; flex-shrink: 0;
 }
