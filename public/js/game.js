@@ -28,6 +28,18 @@ function rankBadgeHtml(p) {
   return p.isRank1Single ? '<span class="badge-icon">👑</span>' : '';
 }
 
+// 이름/잔액이 잘려서 "..."로 안 보이게, 넘치면 폰트 크기를 줄여서 전체가 보이도록 함
+function fitText(el, minPx = 8) {
+  el.style.fontSize = '';
+  const naturalSize = parseFloat(getComputedStyle(el).fontSize);
+  let size = naturalSize;
+  el.style.fontSize = size + 'px';
+  while (el.scrollWidth > el.clientWidth + 0.5 && size > minPx) {
+    size -= 1;
+    el.style.fontSize = size + 'px';
+  }
+}
+
 let gameState = null;
 let prevThankYouActive = false;
 let wakeLock = null;
@@ -221,9 +233,13 @@ function renderPlayer(pos, player, comboGrew = false) {
   prevHandCounts.set(player.userCode, player.handCount);
 
   const avatarEmoji = AVATAR_MAP[player.avatar] || (player.isAI ? '🤖' : '👤');
-  el.querySelector('.player-name').innerHTML = rankBadgeHtml(player) + avatarEmoji + ' ' + player.userName;
-  el.querySelector('.player-balance').textContent = gameMode === 'multi' && player.multiBalance !== undefined
+  const nameEl = el.querySelector('.player-name');
+  nameEl.innerHTML = rankBadgeHtml(player) + avatarEmoji + ' ' + player.userName;
+  fitText(nameEl);
+  const balanceEl = el.querySelector('.player-balance');
+  balanceEl.textContent = gameMode === 'multi' && player.multiBalance !== undefined
     ? `₩${player.multiBalance.toLocaleString()}` : '';
+  fitText(balanceEl);
   el.querySelector('.player-registered').textContent = player.registered ? '✓등록' : '';
 
   const cardsEl = el.querySelector('.player-cards');
@@ -250,9 +266,13 @@ function renderMyArea(me) {
   const phase = gameState.phase;
 
   const myAvatar = AVATAR_MAP[me.avatar] || '👤';
-  document.getElementById('my-name').innerHTML = rankBadgeHtml(me) + myAvatar + ' ' + userName;
-  document.getElementById('my-balance').textContent = gameMode === 'multi'
+  const myNameEl = document.getElementById('my-name');
+  myNameEl.innerHTML = rankBadgeHtml(me) + myAvatar + ' ' + userName;
+  fitText(myNameEl);
+  const myBalanceEl = document.getElementById('my-balance');
+  myBalanceEl.textContent = gameMode === 'multi'
     ? `₩${(me.multiBalance || 0).toLocaleString?.() || ''}` : `${me.singlePoints || 0}pt`;
+  fitText(myBalanceEl);
   document.getElementById('my-registered').textContent = me.registered ? '✓등록' : '';
   document.getElementById('my-character').classList.toggle('active', isCurrent);
 
