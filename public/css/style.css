@@ -144,7 +144,9 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 #combos-area { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: flex-start; flex: 1; overflow-y: auto; width: 100%; }
 
-#piles-area { display: flex; align-items: center; gap: 12px; }
+/* pile-label이 absolute로 빠져서 아래로 삐져나오므로, #center-area의 overflow:hidden에
+   안 잘리게 라벨 높이만큼 여유 공간을 미리 확보해둠 (align-items 정렬엔 영향 없음) */
+#piles-area { display: flex; align-items: center; gap: 12px; padding-bottom: 18px; }
 /* pile-label을 absolute로 빼서 pile의 정렬 기준 높이가 카드 자체(라벨 제외)가 되게 함
    → #piles-area의 align-items:center가 카드/버튼을 정확히 카드 세로중앙으로 맞춤 */
 .pile { display: flex; flex-direction: column; align-items: center; gap: 3px; position: relative; }
