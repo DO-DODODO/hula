@@ -925,7 +925,9 @@ function getPlayerEl(playerCode) {
   const positions = ['top', 'left', 'right'];
   const others = getOtherSeats(myFixedSeat);
   for (let i = 0; i < others.length; i++) {
-    if (others[i]?.userCode === playerCode) return document.getElementById(`player-${positions[i]}`);
+    // player-area(그리드 셀 전체)가 아니라 그 안의 .player-info(텍스트를 딱 감싸는 박스)를 반환해야
+    // 말풍선이 캐릭터 텍스트 바로 옆에 붙음(그리드 셀 기준이면 너무 위로 떠 보임)
+    if (others[i]?.userCode === playerCode) return document.getElementById(`player-${positions[i]}`)?.querySelector('.player-info');
   }
   return null;
 }

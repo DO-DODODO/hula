@@ -141,6 +141,15 @@ function activateThankYouWindow(game, card) {
         if (!game.thankYou.active || game.thankYou.lock || game.paused) return;
         const useful = isCardUseful(card, p.hand, game.combos, p.registered);
         if (!useful) return;
+        // 진단 로그: 나중에 자동취소 로그와 대조해서 결정시점↔사용시점 상태 차이 추적용
+        console.log('[땡큐결정 진단]', JSON.stringify({
+          player: p.userName,
+          userCode: p.userCode,
+          card: cardName(card),
+          registered: p.registered,
+          handBefore: p.hand.map(cardName),
+          existingCombos: game.combos.map(c => ({ id: c.id, type: c.type, cards: c.cards.map(cardName) })),
+        }));
         const r = tryThankYou(game, p.userCode);
         if (r.ok) {
           const cty = confirmThankYou(game, p.userCode);
@@ -867,6 +876,14 @@ io.on('connection', (socket) => {
           if (!game.thankYou.active || game.thankYou.lock || game.paused) return;
           const useful = isCardUseful(card, p.hand, game.combos, p.registered);
           if (!useful) return;
+          console.log('[땡큐결정 진단(재땡큐)]', JSON.stringify({
+            player: p.userName,
+            userCode: p.userCode,
+            card: cardName(card),
+            registered: p.registered,
+            handBefore: p.hand.map(cardName),
+            existingCombos: game.combos.map(c => ({ id: c.id, type: c.type, cards: c.cards.map(cardName) })),
+          }));
           const r = tryThankYou(game, p.userCode);
           if (r.ok) {
             const cty = confirmThankYou(game, p.userCode);
@@ -951,6 +968,15 @@ io.on('connection', (socket) => {
     const sess = sessions.get(socket.id);
     if (sess) {
       waitingRoom.delete(sess.userCode);
+      // 싱글모드: 뒤로가기/탭닫기/네트워크끊김 등으로 연결이 끊기면 카드가 계속
+      // 강제로 버려지지 않게 자동 일시정지. 재접속하면 paused 상태 그대로 복원되어
+      // 일시정지 화면이 뜨고, 재개 버튼으로 이어할 수 있음.
+      const singleGame = singleGames.get(sess.userCode);
+      if (singleGame && singleGame.status === 'playing' && !singleGame.paused) {
+        singleGame.paused = true;
+        clearTimer(singleGame);
+        clearThankYouTimeout(singleGame);
+      }
       if (activeGame) {
         const disc = activeGame.players.find(p => p.userCode === sess.userCode);
         if (disc) {
