@@ -241,7 +241,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .btn-thankyou {
   width: 43px; height: 43px; border-radius: 50%;
   background-image: url('/img/thankyou-button.png');
-  background-size: 180% 180%; background-position: center; background-repeat: no-repeat;
+  background-size: 260% 260%; background-position: center; background-repeat: no-repeat;
   filter: saturate(70%) brightness(92%) hue-rotate(8deg);
   color: transparent; border: none; font-size: 0; font-weight: bold;
   display: flex; align-items: center; justify-content: center;
@@ -390,9 +390,12 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 /* ── Admin Controls ──────────────────────────────────────────────────── */
 #admin-controls { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; z-index: 10; }
-.icon-btn { width: 28px; height: 28px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
-.icon-btn.pause { background: var(--gold); color: #111; letter-spacing: 2px; padding-left: 2px; }
-.icon-btn.stop { background: var(--btn-danger); color: #fff; font-size: 18px; -webkit-text-stroke: 1.5px #fff; }
+/* 아웃라인(고스트) 스타일 - 배경은 은은하게, 테두리/아이콘 색으로 구분 */
+.icon-btn { width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,0.25); cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.icon-btn svg { width: 12px; height: 12px; }
+.icon-btn.pause { border: 1.5px solid var(--gold); color: var(--gold); }
+.icon-btn.stop { border: 1.5px solid #ff6b5e; color: #ff6b5e; }
+.icon-btn.stop svg { width: 13px; height: 13px; }
 
 /* ── Pause Overlay ───────────────────────────────────────────────────── */
 #pause-overlay {
