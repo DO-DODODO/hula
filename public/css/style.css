@@ -299,8 +299,10 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 /* ── ThankYou Bubble ─────────────────────────────────────────────────── */
 .thankyou-bubble {
   position: absolute;
-  background: #ffddb0;
-  color: #cc6600;
+  background: rgba(0,0,0,0.35);
+  border: 1.5px solid var(--gold);
+  color: var(--gold);
+  backdrop-filter: blur(2px);
   font-size: clamp(12px, 1.6vw, 18px);
   font-weight: bold;
   padding: 5px 12px;
@@ -308,7 +310,6 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   white-space: nowrap;
   z-index: 150;
   pointer-events: none;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.3);
 }
 /* 아래(below) - 위쪽 캐릭터 전용, 가운데 정렬 */
 .thankyou-bubble[data-dir="below"] {
