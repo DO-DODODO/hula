@@ -84,7 +84,8 @@ function getPublicState(game, viewerCode = null) {
     phase: game.phase,
     thankYou: game.thankYou,
     thankYouTaker: game.thankYouTaker,
-    firstTurn: game.firstTurn
+    firstTurn: game.firstTurn,
+    timerRemainingMs: game.timerRemainingMs ?? null
   };
 }
 

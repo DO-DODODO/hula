@@ -46,6 +46,7 @@ let wakeLock = null;
 let selectedCards = new Set();
 let timerInterval = null;
 let timerSeconds = 45;
+let savedTimerRemaining = null;
 let thankYouLocked = false;
 let attachMode = false;
 let myFixedSeat = null;
@@ -131,6 +132,7 @@ socket.on('gameState', (state) => {
   const newThankYouActive = !!state.thankYou?.active;
   prevThankYouActive = newThankYouActive;
 
+  const wasPaused = !!gameState?.paused;
   gameState = state;
 
   // 일시정지 화면 표시/해제 (재접속 시에도 서버 상태 기준으로 정확히 복원됨)
@@ -138,6 +140,16 @@ socket.on('gameState', (state) => {
   if (pauseOverlay) {
     pauseOverlay.classList.toggle('show', !!state.paused);
     if (state.paused) releaseWakeLock(); else requestWakeLock();
+  }
+
+  // 타이머 일시정지/재개
+  if (state.paused && !wasPaused) {
+    clearInterval(timerInterval);
+    savedTimerRemaining = state.timerRemainingMs ?? null;
+  } else if (!state.paused && wasPaused) {
+    const startSec = savedTimerRemaining != null ? Math.round(savedTimerRemaining / 1000) : 45;
+    savedTimerRemaining = null;
+    updateTimer(startSec);
   }
   if (myFixedSeat === null) {
     const me = state.players.find(p => p.userCode === userCode);
@@ -462,14 +474,14 @@ function renderCombos() {
 // 조합 영역이 세로모드 등에서 넘치면 스크롤 대신 전체가 보이도록 축소(세이프티넷)
 function fitCombosArea(area) {
   area.style.transform = '';
-  requestAnimationFrame(() => {
-    const availH = area.clientHeight;
-    const neededH = area.scrollHeight;
-    if (availH > 0 && neededH > availH) {
-      const scale = Math.max(0.4, availH / neededH);
-      area.style.transform = `scale(${scale})`;
-    }
-  });
+  area.style.gap = '6px';
+  void area.offsetHeight;
+  if (area.scrollHeight <= area.clientHeight && area.scrollWidth <= area.clientWidth) return;
+  for (const gap of [4, 2, 1, 0]) {
+    area.style.gap = gap + 'px';
+    void area.offsetHeight;
+    if (area.scrollHeight <= area.clientHeight && area.scrollWidth <= area.clientWidth) break;
+  }
 }
 
 function createCardEl(card, size = '') {
@@ -741,7 +753,7 @@ function updateActionButtons(me) {
 }
 
 // ── Timer ──────────────────────────────────────────────────────────────
-function updateTimer() {
+function updateTimer(startSeconds = 45) {
   if (!gameState) return;
   if (timerInterval) clearInterval(timerInterval);
 
@@ -758,7 +770,7 @@ function updateTimer() {
     return;
   }
 
-  timerSeconds = 45;
+  timerSeconds = startSeconds;
 
   function tick() {
     text.textContent = timerSeconds;
@@ -863,51 +875,7 @@ document.getElementById('btn-results-again').onclick = () => {
 };
 
 // ── Confetti ───────────────────────────────────────────────────────────
-function launchConfetti(winnerCode) {
-  const colors = ['#f1c40f', '#e74c3c', '#3498db', '#2ecc71', '#9b59b6', '#e67e22'];
-  const container = document.getElementById('confetti-container');
-  container.innerHTML = '';
-
-  // 1등 영역의 위치를 기준으로 꽃가루 생성
-  let originX = 50, originY = 50; // 기본: 화면 중앙 (%)
-  if (winnerCode === userCode) {
-    const el = document.getElementById('my-character');
-    if (el) {
-      const r = el.getBoundingClientRect();
-      originX = ((r.left + r.width / 2) / window.innerWidth) * 100;
-      originY = ((r.top + r.height / 2) / window.innerHeight) * 100;
-    }
-  } else if (gameState) {
-    const positions = ['top', 'left', 'right'];
-    const others = getOtherSeats(myFixedSeat);
-    others.forEach((p, i) => {
-      if (p?.userCode === winnerCode) {
-        const el = document.getElementById(`player-${positions[i]}`);
-        if (el) {
-          const r = el.getBoundingClientRect();
-          originX = ((r.left + r.width / 2) / window.innerWidth) * 100;
-          originY = ((r.top + r.height / 2) / window.innerHeight) * 100;
-        }
-      }
-    });
-  }
-
-  for (let i = 0; i < 80; i++) {
-    const piece = document.createElement('div');
-    piece.className = 'confetti-piece';
-    const spread = document.body.classList.contains('mobile') ? 20 : 40;
-    piece.style.cssText = `
-      left: ${originX + (Math.random() - 0.5) * spread}%;
-      top: ${Math.max(0, originY - 10)}%;
-      background: ${colors[Math.floor(Math.random() * colors.length)]};
-      animation-duration: ${1.5 + Math.random() * 2}s;
-      animation-delay: ${Math.random() * 0.8}s;
-      transform: rotate(${Math.random() * 360}deg);
-    `;
-    container.appendChild(piece);
-  }
-  setTimeout(() => container.innerHTML = '', 4000);
-}
+function launchConfetti(winnerCode) {}
 
 // ── ThankYou Announce ──────────────────────────────────────────────────
 socket.on('thankYouAnnounce', ({ playerCode, playerName }) => {
@@ -933,18 +901,25 @@ function getPlayerEl(playerCode) {
 }
 
 function showBubble(playerCode, text) {
-  const targetEl = getPlayerEl(playerCode);
-  if (!targetEl) return;
+  const infoEl = getPlayerEl(playerCode);
+  if (!infoEl) return;
 
   const bubble = document.createElement('div');
   bubble.textContent = text;
   bubble.className = 'thankyou-bubble';
-  // 위쪽 캐릭터는 아래로, 나머지(왼쪽/나=왼쪽기준, 오른쪽=오른쪽기준)는 위로 - 화면 밖으로 안 잘리게
-  if (targetEl.id === 'player-top') bubble.dataset.dir = 'below';
-  else if (targetEl.id === 'player-right') bubble.dataset.dir = 'above-right';
-  else bubble.dataset.dir = 'above-left';
-  targetEl.style.position = 'relative';
-  targetEl.appendChild(bubble);
+
+  // infoEl은 .player-info — 부모 player-area의 id로 방향 결정
+  const playerArea = infoEl.closest('.player-area');
+  if (playerArea?.id === 'player-top') {
+    // 위 플레이어: 패 영역 아래에 표시 → player-area 기준 top:100%
+    bubble.dataset.dir = 'below';
+    playerArea.style.position = 'relative';
+    playerArea.appendChild(bubble);
+  } else {
+    bubble.dataset.dir = playerArea?.id === 'player-right' ? 'above-right' : 'above-left';
+    infoEl.style.position = 'relative';
+    infoEl.appendChild(bubble);
+  }
 
   setTimeout(() => bubble.remove(), 2500);
 }

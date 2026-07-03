@@ -139,6 +139,7 @@ function activateThankYouWindow(game, card) {
       const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
       setTimeout(() => {
         if (!game.thankYou.active || game.thankYou.lock || game.paused) return;
+        const card = game.thankYou.card;
         const useful = isCardUseful(card, p.hand, game.combos, p.registered);
         if (!useful) return;
         // 진단 로그: 나중에 자동취소 로그와 대조해서 결정시점↔사용시점 상태 차이 추적용
@@ -803,6 +804,7 @@ io.on('connection', (socket) => {
     const game = getPlayerGame(sess.userCode);
     if (!game || game.mode !== 'single' || game.status !== 'playing') return;
     game.paused = true;
+    game.timerRemainingMs = game.timerStart ? Math.max(0, 45000 - (Date.now() - game.timerStart)) : 45000;
     clearTimer(game);
     clearThankYouTimeout(game);
     broadcastGame(game);
@@ -814,9 +816,11 @@ io.on('connection', (socket) => {
     const game = getPlayerGame(sess.userCode);
     if (!game || game.mode !== 'single' || game.status !== 'playing') return;
     game.paused = false;
+    const remaining = game.timerRemainingMs ?? 45000;
+    game.timerRemainingMs = null;
     broadcastGame(game);
     const cur = getCurrentPlayer(game);
-    startTimer(game);
+    startTimer(game, remaining);
     if (cur?.isAI) setTimeout(() => runAITurn(game, cur), 2000 + Math.random() * 1000);
   });
 
@@ -867,13 +871,13 @@ io.on('connection', (socket) => {
     // 재땡큐 가능: AI들에게 다시 땡큐 기회 부여
     if (game.thankYou.active) {
       const discarderCode = game.thankYou.discarderCode;
-      const card = game.thankYou.card;
       const cur = getCurrentPlayer(game);
       for (const p of game.players) {
         if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
         const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
         setTimeout(() => {
           if (!game.thankYou.active || game.thankYou.lock || game.paused) return;
+          const card = game.thankYou.card;
           const useful = isCardUseful(card, p.hand, game.combos, p.registered);
           if (!useful) return;
           console.log('[땡큐결정 진단(재땡큐)]', JSON.stringify({
