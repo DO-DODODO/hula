@@ -124,14 +124,16 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .badge-icon { margin-right: 2px; }
 .player-balance { font-size: clamp(10px, 1.1vw, 14px); color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .player-registered { font-size: clamp(10px, 1.1vw, 14px); color: #4caf50; min-height: 14px; white-space: nowrap; }
-.player-cards { display: flex; gap: -4px; margin-top: 4px; }
+.player-cards { display: flex; gap: -4px; margin-top: 10px; }
 
 /* 배경/테두리를 텍스트와 별개의 ::before 레이어로 분리해서 텍스트보다 크게 띄움
    (텍스트 자체의 박스 크기·max-width엔 전혀 영향 없어서 글씨가 절대 안 줄어듦) */
 .player-area.active .player-info::before {
   content: '';
   position: absolute;
-  inset: -10px -16px;
+  /* 좌우 4px만 확장(정중앙 유지, 좁은 좌우 컬럼에서도 화면밖으로 안 나감),
+     아래는 -2px만(패 영역과 안 겹침, 패 간격은 margin-top 10px로 확보) */
+  top: -8px; left: -4px; right: -4px; bottom: -2px;
   background: rgba(255,215,0,0.3);
   border-radius: 10px;
   outline: 2px solid rgba(255,215,0,0.7);
