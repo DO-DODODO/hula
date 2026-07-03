@@ -455,6 +455,21 @@ function renderCombos() {
     group.onclick = () => handleComboClick(combo.id);
     area.appendChild(group);
   }
+
+  fitCombosArea(area);
+}
+
+// 조합 영역이 세로모드 등에서 넘치면 스크롤 대신 전체가 보이도록 축소(세이프티넷)
+function fitCombosArea(area) {
+  area.style.transform = '';
+  requestAnimationFrame(() => {
+    const availH = area.clientHeight;
+    const neededH = area.scrollHeight;
+    if (availH > 0 && neededH > availH) {
+      const scale = Math.max(0.4, availH / neededH);
+      area.style.transform = `scale(${scale})`;
+    }
+  });
 }
 
 function createCardEl(card, size = '') {

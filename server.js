@@ -229,9 +229,11 @@ async function runAITurn(game, aiPlayer) {
       } else {
         // 2. 기존 조합에 붙이기 시도
         let attached = false;
+        const attachAttempts = [];
         for (const combo of game.combos) {
           if (canAttach(combo, takerCard)) {
             const r = attachCards(game, aiPlayer.userCode, [takerCard.id], combo.id);
+            attachAttempts.push({ comboId: combo.id, comboType: combo.type, result: r.ok ? 'ok' : (r.msg || 'fail') });
             if (r.ok) {
               broadcastLog(game, `${aiPlayer.userName} 붙이기: [${cardName(takerCard)}]`);
               if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
@@ -243,6 +245,17 @@ async function runAITurn(game, aiPlayer) {
           }
         }
         if (!attached) {
+          // 진단 로그: 왜 자동취소로 빠졌는지 원인 추적용
+          console.log('[땡큐취소 진단]', JSON.stringify({
+            player: aiPlayer.userName,
+            userCode: aiPlayer.userCode,
+            takerCard: cardName(takerCard),
+            registered: aiPlayer.registered,
+            hand: aiPlayer.hand.map(cardName),
+            existingCombos: game.combos.map(c => ({ id: c.id, type: c.type, cards: c.cards.map(cardName) })),
+            comboWithCardFound: false,
+            attachAttempts,
+          }));
           // 3. 못 쓰면 자동 취소 + 벌금
           const cres = cancelConfirmedThankYou(game, aiPlayer.userCode);
           if (cres.ok) {
