@@ -117,21 +117,24 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .player-area.left { grid-area: left; justify-content: center; }
 .player-area.right { grid-area: right; justify-content: center; }
 
-.player-info { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; min-width: 0; }
+.player-info { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; min-width: 0; position: relative; }
 .player-name { font-size: clamp(12px, 1.4vw, 18px); color: #fff; font-weight: bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .badge-icon { margin-right: 2px; }
 .player-balance { font-size: clamp(10px, 1.1vw, 14px); color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .player-registered { font-size: clamp(10px, 1.1vw, 14px); color: #4caf50; min-height: 14px; white-space: nowrap; }
 .player-cards { display: flex; gap: -4px; margin-top: 4px; }
 
-.player-area.active .player-info {
+/* 배경/테두리를 텍스트와 별개의 ::before 레이어로 분리해서 텍스트보다 크게 띄움
+   (텍스트 자체의 박스 크기·max-width엔 전혀 영향 없어서 글씨가 절대 안 줄어듦) */
+.player-area.active .player-info::before {
+  content: '';
+  position: absolute;
+  inset: -10px -16px;
   background: rgba(255,215,0,0.3);
   border-radius: 10px;
-  /* padding/margin으로 배경을 확장하면 max-width로 폭이 제한된 박스라 안쪽 텍스트 공간이
-     줄어들어 글씨가 작아짐(margin은 위치만 밀 뿐 콘텐츠 폭엔 영향 없음).
-     box-shadow의 spread는 레이아웃/폭 계산에 전혀 관여하지 않아 텍스트 크기 유지됨 */
-  box-shadow: 0 0 0 6px rgba(255,215,0,0.3), 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,215,0,0.4);
   outline: 2px solid rgba(255,215,0,0.7);
+  box-shadow: 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,215,0,0.4);
+  z-index: -1;
   animation: turnPulse 1s ease-in-out infinite alternate;
 }
 @keyframes turnPulse {
@@ -239,16 +242,13 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 /* ── Thank You Button ────────────────────────────────────────────────── */
 .btn-thankyou {
-  width: 43px; height: 43px; border-radius: 50%;
-  background-image: url('/img/thankyou-button.png');
-  background-size: 260% 260%; background-position: center; background-repeat: no-repeat;
-  filter: saturate(70%) brightness(92%) hue-rotate(8deg);
-  color: transparent; border: none; font-size: 0; font-weight: bold;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(0,0,0,0.25); border: 1.5px solid #ff6b5e; color: #ff6b5e;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
-.btn-thankyou:not(:disabled) { animation: pulse 0.8s infinite alternate; }
-@keyframes pulse { from { box-shadow: 0 0 6px #c0392b; } to { box-shadow: 0 0 18px #ff6b6b; } }
+.btn-thankyou svg { width: 22px; height: 22px; }
 
 /* ── My Area ─────────────────────────────────────────────────────────── */
 #my-area { grid-area: my; display: flex; align-items: center; padding: 4px 8px; gap: 6px; background: rgba(0,0,0,0.25); }
