@@ -242,6 +242,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   width: 43px; height: 43px; border-radius: 50%;
   background-image: url('/img/thankyou-button.png');
   background-size: 180% 180%; background-position: center; background-repeat: no-repeat;
+  filter: saturate(70%) brightness(92%) hue-rotate(8deg);
   color: transparent; border: none; font-size: 0; font-weight: bold;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: all 0.2s; flex-shrink: 0;
