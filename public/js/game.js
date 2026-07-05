@@ -248,10 +248,9 @@ function renderPlayer(pos, player, comboGrew = false) {
   // 상대방 카드 수 변화 감지 → 모션
   const prevCount = prevHandCounts.get(player.userCode) ?? player.handCount;
   if (player.handCount > prevCount) {
-    const fromEl = pendingThankYouPlayerCode === player.userCode
-      ? document.getElementById('discard-card')
-      : document.getElementById('deck-card');
-    pendingThankYouPlayerCode = null;
+    const isThankYouTake = pendingThankYouPlayerCode === player.userCode;
+    const fromEl = document.getElementById(isThankYouTake ? 'discard-card' : 'deck-card');
+    if (isThankYouTake) pendingThankYouPlayerCode = null;
     flyCard(fromEl, el);
   } else if (player.handCount < prevCount) {
     // 등록/붙이기면 가운데(콤보 영역)로, 버리기면 버린더미로
