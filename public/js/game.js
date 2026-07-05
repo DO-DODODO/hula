@@ -53,6 +53,7 @@ let myFixedSeat = null;
 let sortMode = null;
 let lastTurnPlayerCode = null;
 let lastDrawSource = null; // 'deck' | 'discard' | 'thankYou'
+let lastDrawClone = null; // 낙관적 드로우 애니메이션 중인 카드 엘리먼트 (서버 거부 시 즉시 제거용)
 let prevHandCounts = new Map(); // userCode → handCount
 let lastDiscardCardData = null; // 버린더미 hidden 시 흐릿하게 보여줄 마지막 카드
 let markedCardId = null; // 점 표시할 카드 ID
@@ -199,6 +200,10 @@ socket.on('actionError', (msg) => {
   if (gameState && gameState.phase === 'action' && lastDrawSource) {
     gameState.phase = 'draw';
     lastDrawSource = null;
+    // 이미 다른 사람이 땡큐 등으로 선점해서 드로우가 거부된 경우,
+    // 낙관적으로 재생 중이던 "카드가 온다" 애니메이션을 바로 끊는다
+    lastDrawClone?.remove();
+    lastDrawClone = null;
   }
   if (gameState) render(); // 항상 UI 상태 동기화 (유령 선택 상태 방지)
   showNotif(msg, 'info');
@@ -508,10 +513,10 @@ function getCardColorClass(card) {
 }
 
 function flyCard(fromEl, toEl, faceUp = false, cardData = null, duration = 380) {
-  if (!fromEl || !toEl) return;
+  if (!fromEl || !toEl) return null;
   const from = fromEl.getBoundingClientRect();
   const to = toEl.getBoundingClientRect();
-  if (!from.width || !from.height || !to.width || !to.height) return;
+  if (!from.width || !from.height || !to.width || !to.height) return null;
 
   // 카드 크기 고정 (작은 카드 크기)
   const cardW = Math.min(from.width, 52);
@@ -555,6 +560,8 @@ function flyCard(fromEl, toEl, faceUp = false, cardData = null, duration = 380) 
     });
     setTimeout(() => clone.remove(), dur + 140);
   }));
+
+  return clone;
 }
 
 function cardName(card) {
@@ -581,7 +588,7 @@ function handleDraw(source) {
     : document.getElementById('deck-card');
   // 버린더미에서 가져갈 땐 앞면, 덱에서 가져갈 땐 뒷면
   const discardCard = source === 'discard' ? gameState.discardPile?.top : null;
-  flyCard(fromEl, document.getElementById('my-hand'), source === 'discard', discardCard);
+  lastDrawClone = flyCard(fromEl, document.getElementById('my-hand'), source === 'discard', discardCard);
   lastDrawSource = source;
 
   socket.emit('draw', { source });
