@@ -478,14 +478,21 @@ function renderCombos() {
 // 조합 영역이 세로모드 등에서 넘치면 스크롤 대신 전체가 보이도록 축소(세이프티넷)
 function fitCombosArea(area) {
   area.style.transform = '';
+  area.style.overflow = 'hidden';
   area.style.gap = '6px';
   void area.offsetHeight;
   if (area.scrollHeight <= area.clientHeight && area.scrollWidth <= area.clientWidth) return;
   for (const gap of [4, 2, 1, 0]) {
     area.style.gap = gap + 'px';
     void area.offsetHeight;
-    if (area.scrollHeight <= area.clientHeight && area.scrollWidth <= area.clientWidth) break;
+    if (area.scrollHeight <= area.clientHeight && area.scrollWidth <= area.clientWidth) return;
   }
+  // 간격을 0까지 줄여도 안 맞으면 전체 축소. overflow를 열어줘야 함 —
+  // area 자신이 overflow:hidden이면 축소 전 크기 기준으로 이미 잘려버려서
+  // scale을 줘도 잘린 채로 작아지기만 함. 실제 클리핑은 부모(#center-area)가 담당.
+  const scale = Math.min(area.clientHeight / area.scrollHeight, area.clientWidth / area.scrollWidth, 1);
+  area.style.overflow = 'visible';
+  area.style.transform = `scale(${scale})`;
 }
 
 function createCardEl(card, size = '') {
