@@ -147,7 +147,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 }
 
 /* ── Center ──────────────────────────────────────────────────────────── */
-#center-area { grid-area: center; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; overflow: hidden; padding: 4px; }
+#center-area { grid-area: center; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; overflow: hidden; padding: 4px; }
 
 /* overflow:hidden + JS(fitCombosArea)로 스크롤 대신 항상 다 보이게 축소함(세로모드 대응) */
 #combos-area { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: flex-start; flex: 1; overflow: hidden; width: 100%; transform-origin: top center; }
@@ -255,7 +255,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .btn-thankyou svg { width: 22px; height: 22px; }
 .btn-thankyou-hand {
   width: 30px; height: 30px; border-radius: 50%;
-  background: url('../img/hand2.png') center/180% no-repeat;
+  background: url('../img/hand2.png') 50% 41%/180% no-repeat;
 }
 
 /* ── My Area ─────────────────────────────────────────────────────────── */

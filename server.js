@@ -194,10 +194,14 @@ function advanceTurn(game, winnerCode = null) {
 
 // ── AI Turn ────────────────────────────────────────────────────────────────
 
+function isCurrentPlayer(game, aiPlayer) {
+  return getCurrentPlayer(game)?.userCode === aiPlayer.userCode;
+}
+
 async function runAITurn(game, aiPlayer) {
   if (game.status !== 'playing') return;
   if (game.paused) return;
-  if (getCurrentPlayer(game)?.userCode !== aiPlayer.userCode) return;
+  if (!isCurrentPlayer(game, aiPlayer)) return;
   if (!aiPlayer.isAI) return;
 
   if (game.phase === 'draw') {
@@ -209,7 +213,7 @@ async function runAITurn(game, aiPlayer) {
     if (game.deck.length === 0 && drawSrc === 'deck') { endGame(game, null); return; }
 
     // 생각 중 사이에 다른 사람이 땡큐해서 턴이 바뀌었으면 종료
-    if (getCurrentPlayer(game)?.userCode !== aiPlayer.userCode) return;
+    if (!isCurrentPlayer(game, aiPlayer)) return;
 
     const dr0 = drawCard(game, aiPlayer.userCode, drawSrc);
     if (!dr0.ok) return;
@@ -221,6 +225,8 @@ async function runAITurn(game, aiPlayer) {
       }
     }
     await sleep(500 + Math.random() * 500);
+    // 드로우 후 대기 중 다른 사람이 땡큐해서 턴이 넘어갔으면 여기서 종료 (등록/붙이기/버리기 진행 안 함)
+    if (!isCurrentPlayer(game, aiPlayer)) return;
   }
 
   // 땡큐 테이커: 가져온 카드를 반드시 먼저 사용
@@ -294,10 +300,14 @@ async function runAITurn(game, aiPlayer) {
     }
   }
 
+  if (!isCurrentPlayer(game, aiPlayer)) return;
+
   const actions = decideActions(aiPlayer.hand, game.combos, aiPlayer.registered);
   for (const action of actions) {
     if (action.type === 'register') {
+      if (!isCurrentPlayer(game, aiPlayer)) return;
       const r = registerCards(game, aiPlayer.userCode, action.cards.map(c => c.id));
+      if (!r.ok) return;
       broadcastLog(game, `${aiPlayer.userName} 등록: [${r.combo.cards.map(cardName).join(', ')}]`);
       if (r.win) { broadcastGame(game); await sleep(800); endGame(game, aiPlayer.userCode); return; }
       broadcastGame(game);
@@ -305,12 +315,15 @@ async function runAITurn(game, aiPlayer) {
     }
   }
 
+  if (!isCurrentPlayer(game, aiPlayer)) return;
+
   if (aiPlayer.registered) {
     let didAttach = true;
     while (didAttach) {
       didAttach = false;
       const attaches = decideAttach(aiPlayer.hand, game.combos, true);
       for (const a of attaches) {
+        if (!isCurrentPlayer(game, aiPlayer)) return;
         const r = attachCards(game, aiPlayer.userCode, [a.card.id], a.comboId);
         if (!r.ok) continue;
         didAttach = true;
@@ -322,9 +335,13 @@ async function runAITurn(game, aiPlayer) {
     }
   }
 
+  if (!isCurrentPlayer(game, aiPlayer)) return;
+
   await sleep(400 + Math.random() * 300);
 
-  const cardToDiscard = decideDiscard(aiPlayer.hand);
+  if (!isCurrentPlayer(game, aiPlayer)) return;
+
+  const cardToDiscard = decideDiscard(aiPlayer.hand, game.combos, game.discardPile);
   if (!cardToDiscard) return; // 패가 비었으면 이미 승리 처리 중
   const dr = discardCard(game, aiPlayer.userCode, cardToDiscard.id);
   if (!dr.ok) return;

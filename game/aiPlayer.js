@@ -121,12 +121,62 @@ function decideAttach(hand, allCombos, playerRegistered) {
   return actions;
 }
 
-function decideDiscard(hand) {
+const NEXT_VALUE = v => (v === 13 ? 1 : v + 1);
+const PREV_VALUE = v => (v === 1 ? 13 : v - 1);
+
+// 두 카드가 "1장만 더 오면 조합 완성"되는 페어인지 확인하고, 완성 카드 id 목록을 반환 (아니면 null)
+function getPairCompletionIds(a, b) {
+  const SUITS = ['S', 'H', 'D', 'C'];
+
+  if (a.value === b.value) {
+    // 세트 완성: 남은 무늬 카드
+    return SUITS.filter(s => s !== a.suit && s !== b.suit).map(s => `${a.value}${s}`);
+  }
+
+  if (a.suit === b.suit) {
+    // 인접 (양방향 확장 가능)
+    if (NEXT_VALUE(a.value) === b.value || NEXT_VALUE(b.value) === a.value) {
+      const [first, second] = NEXT_VALUE(a.value) === b.value ? [a.value, b.value] : [b.value, a.value];
+      return [`${PREV_VALUE(first)}${a.suit}`, `${NEXT_VALUE(second)}${a.suit}`];
+    }
+    // 한 칸 띄기 (중간 카드 하나만 완성)
+    if (NEXT_VALUE(NEXT_VALUE(a.value)) === b.value || NEXT_VALUE(NEXT_VALUE(b.value)) === a.value) {
+      const first = NEXT_VALUE(NEXT_VALUE(a.value)) === b.value ? a.value : b.value;
+      return [`${NEXT_VALUE(first)}${a.suit}`];
+    }
+  }
+
+  return null;
+}
+
+function decideDiscard(hand, existingCombos = [], discardPile = []) {
   if (hand.length === 0) return null;
   const combos = findCombos(hand);
   const usedIds = new Set(combos.flatMap(c => c.cards.map(x => x.id)));
   const useless = hand.filter(c => !usedIds.has(c.id));
-  const pool = useless.length > 0 ? useless : hand;
+  const pool0 = useless.length > 0 ? useless : hand;
+
+  // 이미 나온(죽은) 카드: 테이블에 등록된 조합 + 버린 카드 더미
+  const deadIds = new Set([
+    ...existingCombos.flatMap(c => c.cards.map(x => x.id)),
+    ...discardPile.map(c => c.id),
+  ]);
+
+  // 1장만 더 오면 완성되는 살아있는 페어에 속한 카드는 보호
+  const protectedIds = new Set();
+  for (let i = 0; i < pool0.length; i++) {
+    for (let j = i + 1; j < pool0.length; j++) {
+      const completions = getPairCompletionIds(pool0[i], pool0[j]);
+      if (!completions) continue;
+      if (completions.some(id => !deadIds.has(id))) {
+        protectedIds.add(pool0[i].id);
+        protectedIds.add(pool0[j].id);
+      }
+    }
+  }
+
+  const candidates = pool0.filter(c => !protectedIds.has(c.id));
+  const pool = candidates.length > 0 ? candidates : pool0;
   return pool.reduce((max, c) => c.value > max.value ? c : max, pool[0]);
 }
 
