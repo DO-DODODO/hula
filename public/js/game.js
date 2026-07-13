@@ -814,9 +814,18 @@ function updateTimer(startSeconds = 45) {
 }
 
 // ── Game End ───────────────────────────────────────────────────────────
+let lastResults = null;
+let lastResultsWinnerCode = null;
+let lastResultsIsHula = false;
+let readyStatusData = null; // { requiredCodes, readyCodes, deadlines } (멀티모드 "한 판 더" 준비 현황)
+let resultsCountdownInterval = null;
+
 socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1, isHula }) => {
   clearInterval(timerInterval);
   releaseWakeLock();
+  lastResultsWinnerCode = winnerCode;
+  lastResultsIsHula = !!isHula;
+  readyStatusData = null;
 
   if (isHula) {
     // 훌라(등록 없이 원턴 승리): 배경 딤+블러 위에 "훌라!" 단독 재생 후,
@@ -874,38 +883,123 @@ function showGameEndBox(results, winnerCode, winnerName, winMessage, newRank1) {
 function showResults(results) {
   const overlay = document.getElementById('overlay-results');
   overlay.style.display = 'flex';
-  const tbody = document.getElementById('results-body');
-  tbody.innerHTML = results
+  lastResults = results;
+  renderResultsList();
+  updateReadyUI();
+
+  clearInterval(resultsCountdownInterval);
+  if (gameMode === 'multi') {
+    resultsCountdownInterval = setInterval(() => {
+      if (overlay.style.display === 'none') { clearInterval(resultsCountdownInterval); return; }
+      renderResultsList();
+    }, 1000);
+  }
+}
+
+function renderResultsList() {
+  const results = lastResults;
+  if (!results) return;
+  const list = document.getElementById('results-list');
+  list.innerHTML = results
     .sort((a, b) => a.rank - b.rank)
     .map(r => {
       const avatarEmoji = AVATAR_MAP[r.avatar] || (r.isAI ? '🤖' : '👤');
-      const wins = r.totalWins ?? 0;
+      const isWin = r.rank === 1;
+      const isMe = r.userCode === userCode;
       const games = r.totalGames ?? 0;
-      const losses = games - wins;
-      const record = r.isAI ? '-' : `${wins.toLocaleString()}승 ${losses.toLocaleString()}패`;
-      const rate = r.isAI || !games ? '-' : Math.round((wins / games) * 100).toLocaleString() + '%';
-      const notes = [];
-      if (r.rank !== 1 && r.multiplier === 2) notes.push('미등록×2');
+      const rate = r.isAI || !games ? '-' : Math.round(((r.totalWins ?? 0) / games) * 100).toLocaleString() + '%';
+
+      const tags = [];
+      if (isWin && lastResultsIsHula) tags.push({ text: '훌라', penalty: false });
+      if (!isWin && r.multiplier === 2) tags.push({ text: '미등록×2', penalty: true });
       if (r.thankYouChange) {
         const unit = gameMode === 'multi' ? '원' : 'pt';
-        notes.push(`벌금 ${r.thankYouChange > 0 ? '+' : ''}${r.thankYouChange.toLocaleString()}${unit}`);
+        tags.push({ text: `땡큐취소 벌금 ${r.thankYouChange > 0 ? '+' : ''}${r.thankYouChange.toLocaleString()}${unit}`, penalty: true });
       }
-      return `<tr>
-        <td>${r.rank}</td>
-        <td>${avatarEmoji} ${r.userName}</td>
-        <td>${r.cardSum}</td>
-        <td style="color:${r.pointChange >= 0 ? '#4caf50' : '#f44336'}">
-          ${r.pointChange >= 0 ? '+' : ''}${r.pointChange?.toLocaleString()}${gameMode === 'multi' ? '원' : 'pt'}
-        </td>
-        <td>${r.currentBalance !== undefined ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance?.toLocaleString() + 'pt') : '-'}</td>
-        <td>${record}</td>
-        <td>${rate}</td>
-        <td style="font-size:0.8em;color:#aaa">${notes.join(' / ') || '-'}</td>
-      </tr>`;
+      const tagsHtml = tags.map(t => `<span class="ptag${t.penalty ? ' penalty' : ''}">${t.text}</span>`).join('');
+
+      let readyHtml = '';
+      if (gameMode === 'multi' && !r.isAI) {
+        if (readyStatusData && readyStatusData.requiredCodes.includes(r.userCode)) {
+          if (readyStatusData.readyCodes.includes(r.userCode)) {
+            readyHtml = `<span class="pready">✅</span>`;
+          } else {
+            const deadline = readyStatusData.deadlines?.[r.userCode];
+            const secs = deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : null;
+            readyHtml = `<span class="pready">⏳${secs !== null ? ` ${secs}초` : ''}</span>`;
+          }
+        } else {
+          readyHtml = `<span class="pready">✅</span>`; // 관리자(준비 대상 아님)
+        }
+      }
+
+      const balanceText = r.currentBalance !== undefined
+        ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance?.toLocaleString() + 'pt')
+        : '-';
+
+      const cardClass = ['pcard', isWin ? 'win' : '', (isMe && !isWin) ? 'me' : ''].filter(Boolean).join(' ');
+
+      return `<div class="${cardClass}">
+        <div class="pcard-top">
+          <span class="prank">${r.rank}</span>
+          <span class="pname">${avatarEmoji} ${r.userName}</span>
+          ${isMe ? '<span class="pme-badge">나</span>' : ''}
+          ${tagsHtml}
+          ${readyHtml}
+        </div>
+        <div class="pcard-bottom">
+          <b class="pdelta ${r.pointChange >= 0 ? 'pos' : 'neg'}">${r.pointChange >= 0 ? '+' : ''}${r.pointChange?.toLocaleString()}${gameMode === 'multi' ? '원' : 'pt'}</b>
+          <span>${balanceText}</span>
+          <span>${rate}</span>
+        </div>
+      </div>`;
     }).join('');
 }
 
+socket.on('readyStatus', (data) => {
+  readyStatusData = data;
+  if (lastResults) { renderResultsList(); updateReadyUI(); }
+});
+
+function updateReadyUI() {
+  const again = document.getElementById('btn-results-again');
+  const readyBtn = document.getElementById('btn-results-ready');
+
+  if (gameMode !== 'multi') {
+    again.style.display = '';
+    readyBtn.style.display = 'none';
+    again.disabled = false;
+    again.textContent = '한 판 더!';
+    return;
+  }
+
+  if (isAdmin) {
+    readyBtn.style.display = 'none';
+    again.style.display = '';
+    if (!readyStatusData || readyStatusData.requiredCodes.length === 0) {
+      again.disabled = false;
+      again.textContent = '한 판 더!';
+    } else {
+      const total = readyStatusData.requiredCodes.length;
+      const done = readyStatusData.readyCodes.length;
+      again.disabled = done < total;
+      again.textContent = `한 판 더! (${done}/${total})`;
+    }
+  } else {
+    again.style.display = 'none';
+    readyBtn.style.display = '';
+    const amReady = !!readyStatusData?.readyCodes.includes(userCode);
+    readyBtn.textContent = amReady ? '준비완료' : '준비';
+    readyBtn.disabled = amReady;
+    readyBtn.classList.toggle('done', amReady);
+  }
+}
+
 document.getElementById('btn-results-home').onclick = () => { socket.disconnect(); location.href = '/'; };
+
+document.getElementById('btn-results-ready').onclick = () => {
+  socket.emit('readyForNextGame');
+};
 
 document.getElementById('btn-results-again').onclick = () => {
   document.getElementById('overlay-results').style.display = 'none';

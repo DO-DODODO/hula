@@ -315,6 +315,9 @@ function confirmThankYou(game, playerCode) {
   game.phase = 'action';
   game.thankYouTaker = playerCode;
   game.thankYouTakerCard = card;
+  // 땡큐로 새치기해서 턴을 받는 경우 drawCard를 안 거치므로, 여기서도
+  // 훌라 판정 기준점(hulaEligible)을 갱신해야 이전 턴의 값이 남아있지 않음
+  player.hulaEligible = !player.registered;
   game.thankYou = { active: false, lock: null, card: null, discarderCode: null };
   game.discardPileHidden = true;
 

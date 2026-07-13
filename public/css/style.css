@@ -523,12 +523,30 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 
 /* ── Results Overlay ─────────────────────────────────────────────────── */
 #overlay-results { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 300; }
-#results-box { background: #1e1e1e; border-radius: 16px; padding: 24px; color: #fff; display: flex; flex-direction: column; gap: 16px; max-width: 95vw; }
-#results-box h2 { color: var(--gold); text-align: center; }
-#results-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-#results-table th { background: rgba(255,255,255,0.1); padding: 8px; text-align: center; color: var(--gold); }
-#results-table td { padding: 8px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
-#results-table tr:first-child td { color: var(--gold); }
+#results-box { background: #1e1e1e; border-radius: 16px; padding: 16px; color: #fff; display: flex; flex-direction: column; gap: 10px; max-width: 95vw; width: 340px; box-sizing: border-box; }
+#results-box h2 { color: var(--gold); text-align: center; margin: 0; font-size: 16px; }
+
+#results-list { display: flex; flex-direction: column; gap: 5px; }
+.pcard { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 7px 9px; display: flex; flex-direction: column; gap: 2px; }
+.pcard.win { border-color: var(--gold); background: rgba(201,168,76,0.08); }
+.pcard.me { border-color: #5aa9c9; box-shadow: 0 0 0 1px #5aa9c9 inset; }
+.pcard-top { display: flex; align-items: center; gap: 5px; }
+.pcard .prank { font-size: 9.5px; color: #999; font-weight: 700; width: 13px; flex: none; }
+.pcard.win .prank { color: var(--gold); }
+.pcard .pname { font-size: 12px; font-weight: 700; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard .pme-badge { font-size: 8.5px; background: rgba(90,169,201,0.2); color: #8fd0ec; padding: 1px 5px; border-radius: 20px; flex: none; }
+.pcard .ptag { font-size: 8.5px; background: rgba(255,224,138,0.15); color: #ffe08a; padding: 1px 6px; border-radius: 20px; flex: none; white-space: nowrap; }
+.pcard .ptag.penalty { background: rgba(224,161,92,0.15); color: #e0a15c; }
+.pcard .pready { flex: none; font-size: 10.5px; }
+.pcard-bottom { display: flex; gap: 7px; align-items: baseline; font-size: 10px; color: #999; padding-left: 18px; flex-wrap: wrap; }
+.pcard-bottom b { font-size: 11px; }
+.pcard .pdelta.pos { color: #4caf50; }
+.pcard .pdelta.neg { color: #f44336; }
+.pcard .pwait { font-size: 9px; color: #999; }
+
+.btn-ready { background: rgba(201,168,76,0.18); color: #ffe08a; border: 1.5px solid var(--gold); border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: bold; cursor: pointer; }
+.btn-ready.done { background: rgba(91,195,131,0.15); color: #5BC383; border-color: #5BC383; cursor: default; }
+#btn-results-again:disabled { background: #4a4636; color: #8a8676; cursor: default; }
 
 /* ── Discard Flip Animation ──────────────────────────────────────────── */
 @keyframes discardFlip {

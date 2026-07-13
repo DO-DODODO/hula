@@ -27,6 +27,7 @@ const singleGames = new Map();
 const lastSingleWinners = new Map(); // userCode → 마지막 싱글 승자 userCode
 let lastMultiGamePlayers = null;
 let lastMultiGameWinnerCode = null;
+let readyPhase = null; // { requiredCodes: Set, readyCodes: Set, deadlines: Map(userCode->ms), timers: Map(userCode->Timeout) }
 const entryAttempts = new Map(); // socket.id → 시도 횟수
 const entryBlocked = new Set();  // socket.id → 차단
 
@@ -50,6 +51,69 @@ function broadcastGame(game) {
       emitToPlayer(p.userCode, 'gameState', getPublicState(game, p.userCode));
     }
   }
+}
+
+// ── 멀티모드 "한 판 더" 준비 단계 ────────────────────────────────────────
+const READY_TIMEOUT_MS = 30000;
+
+function clearReadyPhase() {
+  if (readyPhase) {
+    for (const t of readyPhase.timers.values()) clearTimeout(t);
+  }
+  readyPhase = null;
+}
+
+function broadcastReadyStatus() {
+  if (!readyPhase || !lastMultiGamePlayers) return;
+  const payload = {
+    requiredCodes: [...readyPhase.requiredCodes],
+    readyCodes: [...readyPhase.readyCodes],
+    deadlines: Object.fromEntries(readyPhase.deadlines),
+  };
+  for (const p of lastMultiGamePlayers) {
+    if (!p.isAI) emitToPlayer(p.userCode, 'readyStatus', payload);
+  }
+}
+
+function markReady(userCode) {
+  if (!readyPhase || !readyPhase.requiredCodes.has(userCode)) return;
+  if (readyPhase.readyCodes.has(userCode)) return;
+  readyPhase.readyCodes.add(userCode);
+  const t = readyPhase.timers.get(userCode);
+  if (t) clearTimeout(t);
+  readyPhase.timers.delete(userCode);
+  broadcastReadyStatus();
+}
+
+// 멀티모드 게임 종료 직후 호출: 다음 판 "준비" 단계를 세팅한다.
+// 실제 사람이 관리자 혼자(또는 0명)만 남았으면 준비 단계 없이 메인으로 안내.
+async function startReadyPhase() {
+  clearReadyPhase();
+  if (!lastMultiGamePlayers) return;
+
+  const onlineHumans = lastMultiGamePlayers.filter(p => !p.isAI && getSocketId(p.userCode));
+  if (onlineHumans.length <= 1) {
+    for (const p of onlineHumans) {
+      emitToPlayer(p.userCode, 'playAgainError', '함께할 사람이 없어 메인으로 돌아갑니다.');
+    }
+    return;
+  }
+
+  const admins = new Set();
+  for (const p of onlineHumans) {
+    const u = await db.getUser(p.userCode);
+    if (u?.isAdmin) admins.add(p.userCode);
+  }
+  const requiredCodes = new Set(onlineHumans.filter(p => !admins.has(p.userCode)).map(p => p.userCode));
+
+  readyPhase = { requiredCodes, readyCodes: new Set(), deadlines: new Map(), timers: new Map() };
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  for (const code of requiredCodes) {
+    readyPhase.deadlines.set(code, deadline);
+    readyPhase.timers.set(code, setTimeout(() => markReady(code), READY_TIMEOUT_MS));
+  }
+
+  broadcastReadyStatus();
 }
 
 // 게임 시작 시점의 전역 1위(싱글 포인트 / 멀티 잔액)를 스냅샷으로 저장 (1등 뱃지, 등극 연출 판단용)
@@ -453,6 +517,7 @@ async function endGame(game, winnerCode) {
     }));
     lastMultiGameWinnerCode = actualWinnerCode;
     activeGame = null;
+    await startReadyPhase();
   }
 }
 
@@ -948,6 +1013,13 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // 준비 안 된 사람 있으면 막기 (클라이언트 버튼도 막혀있지만 서버에서 재검증)
+    if (readyPhase && readyPhase.requiredCodes.size > 0) {
+      const notReady = [...readyPhase.requiredCodes].some(c => !readyPhase.readyCodes.has(c));
+      if (notReady) return;
+    }
+    clearReadyPhase();
+
     // 승자 먼저, 나머지 이전 순서 유지
     let players = [...lastMultiGamePlayers];
     if (lastMultiGameWinnerCode) {
@@ -973,6 +1045,12 @@ io.on('connection', (socket) => {
     const cur = getCurrentPlayer(activeGame);
     startTimer(activeGame);
     if (cur.isAI) setTimeout(() => runAITurn(activeGame, cur), 2000 + Math.random() * 1000);
+  });
+
+  socket.on('readyForNextGame', () => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    markReady(sess.userCode);
   });
 
   socket.on('getRanking', async () => {
