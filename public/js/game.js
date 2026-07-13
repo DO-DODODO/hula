@@ -965,15 +965,15 @@ function renderResultsList() {
       const isWin = r.rank === 1;
       const isMe = r.userCode === userCode;
       const games = r.totalGames ?? 0;
-      const rate = r.isAI || !games ? '-' : Math.round(((r.totalWins ?? 0) / games) * 100).toLocaleString() + '%';
+      const rate = r.isAI ? '' : (!games ? '-' : Math.round(((r.totalWins ?? 0) / games) * 100).toLocaleString() + '%');
 
       const tags = [];
       if (isWin && lastResultsIsHula) tags.push({ text: '훌라', penalty: false });
-      if (!isWin && lastResultsIsHula) tags.push({ text: `훌라벌금×${r.multiplier}`, penalty: true });
-      else if (!isWin && !r.registered) tags.push({ text: '미등록벌금×2', penalty: true });
+      if (!isWin && lastResultsIsHula) tags.push({ text: `훌라 벌금×${r.multiplier}`, penalty: true });
+      else if (!isWin && !r.registered) tags.push({ text: '미등록 벌금×2', penalty: true });
       if (r.thankYouChange) {
         const unit = gameMode === 'multi' ? '원' : 'pt';
-        tags.push({ text: `땡큐취소 벌금 ${r.thankYouChange > 0 ? '+' : ''}${r.thankYouChange.toLocaleString()}${unit}`, penalty: true });
+        tags.push({ text: `땡큐 취소 벌금 ${r.thankYouChange > 0 ? '+' : ''}${r.thankYouChange.toLocaleString()}${unit}`, penalty: true });
       }
       const tagsHtml = tags.map(t => `<span class="ptag${t.penalty ? ' penalty' : ''}">${t.text}</span>`).join('');
 
@@ -994,7 +994,7 @@ function renderResultsList() {
 
       const balanceText = r.currentBalance !== undefined
         ? (gameMode === 'multi' ? '₩' + r.currentBalance?.toLocaleString() : r.currentBalance?.toLocaleString() + 'pt')
-        : '-';
+        : '';
 
       const cardClass = ['pcard', isWin ? 'win' : '', (isMe && !isWin) ? 'me' : ''].filter(Boolean).join(' ');
 
@@ -1002,9 +1002,9 @@ function renderResultsList() {
         <div class="pcard-top">
           <span class="prank">${r.rank}</span>
           <span class="pname">${avatarEmoji} ${r.userName}</span>
-          ${isMe ? '<span class="pme-badge">나</span>' : ''}
           ${tagsHtml}
           ${readyHtml}
+          ${isMe ? '<span class="pme-badge">나</span>' : ''}
         </div>
         <div class="pcard-bottom">
           <b class="pdelta ${r.pointChange >= 0 ? 'pos' : 'neg'}">${r.pointChange >= 0 ? '+' : ''}${r.pointChange?.toLocaleString()}${gameMode === 'multi' ? '원' : 'pt'}</b>
