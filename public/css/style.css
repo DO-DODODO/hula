@@ -244,7 +244,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   100% { transform: scale(1) rotate(0deg);    opacity: 1; }
 }
 .card-entering { animation: cardSlideIn 0.28s ease forwards; }
-.card-leaving  { animation: cardSlideOut 0.22s ease forwards; pointer-events: none; }
+.card-leaving  { animation: cardSlideOut 0.13s ease forwards; pointer-events: none; }
 .discard-pop   { animation: discardPop 0.35s ease forwards; }
 
 /* Opponent back cards - overlapping */

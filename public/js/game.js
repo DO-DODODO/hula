@@ -752,7 +752,7 @@ document.getElementById('btn-discard').onclick = () => {
     flyCard(cardEl.querySelector('.card'), document.getElementById('discard-card'));
     // 슬롯 너비를 0으로 접어서 빈 자리 없애기
     cardEl.style.overflow = 'hidden';
-    cardEl.style.transition = 'width 0.2s ease 0.05s, margin-left 0.2s ease 0.05s, min-width 0.2s ease 0.05s';
+    cardEl.style.transition = 'width 0.13s ease, margin-left 0.13s ease, min-width 0.13s ease';
     requestAnimationFrame(() => {
       cardEl.style.width = '0';
       cardEl.style.minWidth = '0';
@@ -761,7 +761,7 @@ document.getElementById('btn-discard').onclick = () => {
     setTimeout(() => {
       socket.emit('discard', { cardId: cardIds[0] });
       clearSelection();
-    }, 220);
+    }, 150);
   } else {
     socket.emit('discard', { cardId: cardIds[0] });
     clearSelection();
@@ -965,7 +965,9 @@ function renderResultsList() {
       const isWin = r.rank === 1;
       const isMe = r.userCode === userCode;
       const games = r.totalGames ?? 0;
-      const rate = r.isAI ? '' : (!games ? '-' : Math.round(((r.totalWins ?? 0) / games) * 100).toLocaleString() + '%');
+      const wins = r.totalWins ?? 0;
+      const losses = games - wins;
+      const rate = r.isAI ? '' : (!games ? '-' : `${wins}승 ${losses}패(${Math.round((wins / games) * 100)}%)`);
 
       const tags = [];
       if (isWin && lastResultsIsHula) tags.push({ text: '훌라', penalty: false });
