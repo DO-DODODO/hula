@@ -591,6 +591,31 @@ function findMyCard(cardId) {
 document.getElementById('my-hand').addEventListener('scroll', syncSelectPortals);
 window.addEventListener('resize', syncSelectPortals);
 
+// 등록/붙이기/버리기 공통: 서버 응답을 기다리지 않고 그 자리에서 바로 카드가
+// 빠져나가는 걸 보여준다. 서버 왕복(특히 배포 환경 네트워크 지연) 이후에야
+// 손패가 통째로 다시 그려지면 그 사이 빈자리가 뚝 끊겨 보이기 때문.
+function animateHandCardsLeaving(cardIds, toEl, onDone) {
+  let found = false;
+  for (const cardId of cardIds) {
+    const cardEl = document.querySelector(`#my-hand [data-card-id="${cardId}"]`);
+    if (!cardEl) continue;
+    found = true;
+    cardEl.classList.remove('selected');
+    deselectCard(cardId);
+    cardEl.classList.add('card-leaving');
+    flyCard(cardEl.querySelector('.card'), toEl);
+    cardEl.style.overflow = 'hidden';
+    cardEl.style.transition = 'width 0.13s ease, margin-left 0.13s ease, min-width 0.13s ease';
+    requestAnimationFrame(() => {
+      cardEl.style.width = '0';
+      cardEl.style.minWidth = '0';
+      cardEl.style.marginLeft = '0';
+    });
+  }
+  if (found) setTimeout(onDone, 150);
+  else onDone();
+}
+
 function flyCard(fromEl, toEl, faceUp = false, cardData = null, duration = 380) {
   if (!fromEl || !toEl) return null;
   const from = fromEl.getBoundingClientRect();
@@ -693,17 +718,16 @@ function handleComboClick(comboId) {
   if (!attachMode) return;
   const cardIds = [...selectedCards];
   if (cardIds.length === 0) return;
-  socket.emit('attach', { cardIds, comboId });
-  clearSelection();
   attachMode = false;
   document.getElementById('modal-attach').style.display = 'none';
+  const toEl = document.querySelector(`.combo-group[data-combo-id="${comboId}"]`) || document.getElementById('combos-area');
+  animateHandCardsLeaving(cardIds, toEl, () => socket.emit('attach', { cardIds, comboId }));
 }
 
 document.getElementById('btn-register').onclick = () => {
   const cardIds = [...selectedCards];
   if (cardIds.length === 0) return;
-  socket.emit('register', { cardIds });
-  clearSelection();
+  animateHandCardsLeaving(cardIds, document.getElementById('combos-area'), () => socket.emit('register', { cardIds }));
 };
 
 document.getElementById('btn-attach').onclick = () => {
@@ -725,10 +749,10 @@ document.getElementById('btn-attach').onclick = () => {
       item.appendChild(el);
     });
     item.onclick = () => {
-      socket.emit('attach', { cardIds, comboId: combo.id });
-      clearSelection();
       attachMode = false;
       document.getElementById('modal-attach').style.display = 'none';
+      const toEl = document.querySelector(`.combo-group[data-combo-id="${combo.id}"]`) || document.getElementById('combos-area');
+      animateHandCardsLeaving(cardIds, toEl, () => socket.emit('attach', { cardIds, comboId: combo.id }));
     };
     list.appendChild(item);
   }
@@ -744,28 +768,10 @@ document.getElementById('btn-attach-cancel').onclick = () => {
 document.getElementById('btn-discard').onclick = () => {
   const cardIds = [...selectedCards];
   if (cardIds.length !== 1) { showNotif('버릴 카드 1장을 선택하세요', 'info'); return; }
-  const cardEl = document.querySelector(`#my-hand [data-card-id="${cardIds[0]}"]`);
-  if (cardEl) {
-    cardEl.classList.remove('selected');
-    deselectCard(cardIds[0]);
-    cardEl.classList.add('card-leaving');
-    flyCard(cardEl.querySelector('.card'), document.getElementById('discard-card'));
-    // 슬롯 너비를 0으로 접어서 빈 자리 없애기
-    cardEl.style.overflow = 'hidden';
-    cardEl.style.transition = 'width 0.13s ease, margin-left 0.13s ease, min-width 0.13s ease';
-    requestAnimationFrame(() => {
-      cardEl.style.width = '0';
-      cardEl.style.minWidth = '0';
-      cardEl.style.marginLeft = '0';
-    });
-    setTimeout(() => {
-      socket.emit('discard', { cardId: cardIds[0] });
-      clearSelection();
-    }, 150);
-  } else {
+  animateHandCardsLeaving(cardIds, document.getElementById('discard-card'), () => {
     socket.emit('discard', { cardId: cardIds[0] });
     clearSelection();
-  }
+  });
 };
 
 // ── Sort ───────────────────────────────────────────────────────────────
