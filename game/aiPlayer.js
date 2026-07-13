@@ -165,6 +165,9 @@ function decideDiscard(hand, existingCombos = [], discardPile = []) {
   // 1장만 더 오면 완성되는 살아있는 페어에 속한 카드는 보호
   const protectedIds = new Set();
   for (let i = 0; i < pool0.length; i++) {
+    // 7은 혼자서도 등록 가능하고 짧은 시퀀스도 만들 수 있는 만능 카드라 항상 최대한 보호
+    // (짝을 못 찾아 아래 페어 보호에 안 걸리더라도 여기서 먼저 챙겨준다)
+    if (pool0[i].value === 7) protectedIds.add(pool0[i].id);
     for (let j = i + 1; j < pool0.length; j++) {
       const completions = getPairCompletionIds(pool0[i], pool0[j]);
       if (!completions) continue;
@@ -177,6 +180,7 @@ function decideDiscard(hand, existingCombos = [], discardPile = []) {
 
   const candidates = pool0.filter(c => !protectedIds.has(c.id));
   const pool = candidates.length > 0 ? candidates : pool0;
+
   return pool.reduce((max, c) => c.value > max.value ? c : max, pool[0]);
 }
 

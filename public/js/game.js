@@ -818,6 +818,25 @@ socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1, i
   clearInterval(timerInterval);
   releaseWakeLock();
 
+  if (isHula) {
+    // 훌라(등록 없이 원턴 승리): 배경 딤+블러 위에 "훌라!" 단독 재생 후,
+    // 사라지면서 기존 승리 화면으로 이어짐
+    const hulaOverlay = document.getElementById('overlay-hula');
+    hulaOverlay.style.display = 'flex';
+    hulaOverlay.classList.remove('play');
+    void hulaOverlay.offsetWidth; // 애니메이션 재시작을 위한 강제 리플로우
+    hulaOverlay.classList.add('play');
+    setTimeout(() => {
+      hulaOverlay.style.display = 'none';
+      hulaOverlay.classList.remove('play');
+      showGameEndBox(results, winnerCode, winnerName, winMessage, newRank1);
+    }, 3000);
+  } else {
+    showGameEndBox(results, winnerCode, winnerName, winMessage, newRank1);
+  }
+});
+
+function showGameEndBox(results, winnerCode, winnerName, winMessage, newRank1) {
   const overlay = document.getElementById('overlay-gameend');
   overlay.style.display = 'flex';
 
@@ -826,14 +845,6 @@ socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1, i
   document.getElementById('win-avatar').textContent = winnerAvatar;
   document.getElementById('win-name').textContent = `${winnerName} 승리!`;
   document.getElementById('win-message').textContent = winMessage || '';
-
-  // 훌라 연출 (등록 없이 원턴 승리)
-  const hulaSlot = document.getElementById('win-hula-slot');
-  hulaSlot.classList.remove('play');
-  if (isHula) {
-    void hulaSlot.offsetWidth; // 애니메이션 재시작을 위한 강제 리플로우
-    hulaSlot.classList.add('play');
-  }
 
   // 새로 1위 등극 연출 (싱글=👑, 멀티=💎)
   const badgeSlot = document.getElementById('win-rank1-badge-slot');
@@ -858,7 +869,7 @@ socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1, i
     overlay.style.display = 'none';
     showResults(results);
   };
-});
+}
 
 function showResults(results) {
   const overlay = document.getElementById('overlay-results');

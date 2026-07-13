@@ -10,6 +10,7 @@ function createGame(mode, players) {
     ...p,
     hand: deck.splice(0, 7),
     registered: false,
+    hulaEligible: false,
     seatIndex: idx
   }));
 
@@ -118,6 +119,11 @@ function drawCard(game, playerCode, source) {
     card = game.deck.pop();
   }
 
+  // 훌라 판정 기준점: 이번 턴 시작(드로우) 시점에 등록 이력이 없었는지 스냅샷.
+  // 등록 후 같은 턴에 이어서 붙이기로 손패를 마저 비우는 경우도 훌라로 인정해야 하므로,
+  // registerCards 안에서 그때그때 player.registered를 보는 대신 턴 단위로 고정해둔다.
+  player.hulaEligible = !player.registered;
+
   player.hand.push(card);
   game.drawnCard = card;
   game.phase = 'action';
@@ -136,8 +142,6 @@ function registerCards(game, playerCode, cardIds) {
   if (cards.length !== cardIds.length) return { ok: false, msg: '카드를 찾을 수 없습니다' };
   if (!isValidCombo(cards)) return { ok: false, msg: '유효하지 않은 조합입니다' };
 
-  const wasNeverRegistered = !player.registered;
-
   const type = getComboType(cards);
   const combo = { id: `combo_${comboIdCounter++}`, ownerId: playerCode, cards, type };
   game.combos.push(combo);
@@ -151,8 +155,8 @@ function registerCards(game, playerCode, cardIds) {
   }
 
   if (player.hand.length === 0) {
-    // 훌라: 게임 내내 한 번도 등록 안 하다가 이번 등록 한 번으로 손패가 전부 비어 승리
-    const isHula = wasNeverRegistered;
+    // 훌라: 이번 턴 시작(드로우) 시점에 한 번도 등록 안 한 상태였는데, 등록 한 번으로 손패가 전부 비어 승리
+    const isHula = player.hulaEligible === true;
     if (isHula) game.hulaWinnerCode = playerCode;
     return { ok: true, combo, win: true, isHula };
   }
@@ -185,7 +189,13 @@ function attachCards(game, playerCode, cardIds, comboId) {
     game.thankYouTakerCard = null;
   }
 
-  if (player.hand.length === 0) return { ok: true, win: true };
+  if (player.hand.length === 0) {
+    // 훌라: 이번 턴 시작 시점에 한 번도 등록 안 한 상태였다가, 같은 턴에 등록+붙이기를 이어가며
+    // 손패를 전부 비우고 승리한 경우도 포함(예: 5장 등록 후 남은 카드들을 그 조합에 붙여서 완주)
+    const isHula = player.hulaEligible === true;
+    if (isHula) game.hulaWinnerCode = playerCode;
+    return { ok: true, win: true, isHula };
+  }
   return { ok: true };
 }
 
@@ -212,9 +222,13 @@ function discardCard(game, playerCode, cardId) {
 
   if (player.hand.length === 0) {
     // 패가 0장 → 즉시 승리 (버린더미에 올리기 전에 종료)
+    // 훌라: 이번 턴 시작 시점에 한 번도 등록 안 했다가, 같은 턴에 등록/붙이기로 손패를
+    // 마지막 한 장까지 비운 뒤 그 카드를 버려서 승리한 경우도 포함
+    const isHula = player.hulaEligible === true;
+    if (isHula) game.hulaWinnerCode = playerCode;
     game.discardPile.push(card);
     game.phase = 'draw';
-    return { ok: true, card, win: true };
+    return { ok: true, card, win: true, isHula };
   }
 
   game.discardPileHidden = false;
