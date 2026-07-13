@@ -44,6 +44,7 @@ let gameState = null;
 let prevThankYouActive = false;
 let wakeLock = null;
 let selectedCards = new Set();
+let selectPortals = new Map(); // cardId → position:fixed로 body에 띄운 "선택 카드" 복제본
 let timerInterval = null;
 let timerSeconds = 45;
 let savedTimerRemaining = null;
@@ -118,7 +119,7 @@ socket.on('gameState', (state) => {
   if (!gameState || state.id !== gameState.id) {
     document.getElementById('overlay-gameend').style.display = 'none';
     document.getElementById('overlay-results').style.display = 'none';
-    selectedCards.clear();
+    clearSelection();
     myFixedSeat = null;
     lastTurnPlayerCode = null;
     prevThankYouActive = false;
@@ -163,7 +164,7 @@ socket.on('gameState', (state) => {
     updateTimer();
     markedCardId = null;
     markedCardSource = null;
-    if (state.currentPlayerCode !== userCode) selectedCards.clear();
+    if (state.currentPlayerCode !== userCode) clearSelection();
   }
   render();
 });
@@ -374,6 +375,7 @@ function renderMyArea(me) {
       }
     });
   }
+  syncSelectPortals();
 }
 
 function renderCenter() {
@@ -535,6 +537,60 @@ function getCardColorClass(card) {
   return (card.suit === 'H' || card.suit === 'D') ? 'red' : 'black';
 }
 
+// ── 선택 카드 "포탈" ──────────────────────────────────────────────────
+// #my-hand는 overflow-x:auto라서 그 안에서 transform으로 카드를 띄우면
+// overflow-y가 auto로 강제 승격되어 위가 잘린다. 그래서 원래 카드는 살짝
+// 흐리게 두고, 같은 위치에 position:fixed 복제본을 body에 띄워 그게
+// "선택되어 뜬 카드"처럼 보이게 한다(flyCard()와 같은 패턴).
+function clearSelection() {
+  selectedCards.clear();
+  for (const portal of selectPortals.values()) portal.remove();
+  selectPortals.clear();
+}
+
+function deselectCard(cardId) {
+  selectedCards.delete(cardId);
+  const portal = selectPortals.get(cardId);
+  if (portal) { portal.remove(); selectPortals.delete(cardId); }
+}
+
+function syncSelectPortals() {
+  const handEl = document.getElementById('my-hand');
+  for (const [cardId, portal] of [...selectPortals]) {
+    if (!selectedCards.has(cardId)) { portal.remove(); selectPortals.delete(cardId); }
+  }
+  for (const cardId of selectedCards) {
+    const slot = handEl.querySelector(`[data-card-id="${cardId}"]`);
+    const card = findMyCard(cardId);
+    if (!slot || !card) continue;
+    const rect = slot.getBoundingClientRect();
+    let portal = selectPortals.get(cardId);
+    if (!portal) {
+      portal = document.createElement('div');
+      portal.className = 'portal-card';
+      portal.appendChild(cardInnerEl(card));
+      document.body.appendChild(portal);
+      selectPortals.set(cardId, portal);
+    }
+    portal.className = `portal-card ${getCardColorClass(card)}`;
+    Object.assign(portal.style, {
+      left: rect.left + 'px',
+      top: (rect.top - 14) + 'px',
+      width: rect.width + 'px',
+      height: rect.height + 'px',
+    });
+  }
+}
+
+function findMyCard(cardId) {
+  const me = gameState?.players.find(p => p.userCode === userCode);
+  return me?.hand.find(c => c.id === cardId);
+}
+
+// 손패 가로 스크롤/화면 회전 시 포탈 카드 위치 갱신
+document.getElementById('my-hand').addEventListener('scroll', syncSelectPortals);
+window.addEventListener('resize', syncSelectPortals);
+
 function flyCard(fromEl, toEl, faceUp = false, cardData = null, duration = 380) {
   if (!fromEl || !toEl) return null;
   const from = fromEl.getBoundingClientRect();
@@ -615,7 +671,7 @@ function handleDraw(source) {
   lastDrawSource = source;
 
   socket.emit('draw', { source });
-  selectedCards.clear();
+  clearSelection();
 }
 
 function toggleCardSelect(cardId, el) {
@@ -629,6 +685,7 @@ function toggleCardSelect(cardId, el) {
     selectedCards.add(cardId);
     el.classList.add('selected');
   }
+  syncSelectPortals();
   updateActionButtons(gameState.players.find(p => p.userCode === userCode));
 }
 
@@ -637,7 +694,7 @@ function handleComboClick(comboId) {
   const cardIds = [...selectedCards];
   if (cardIds.length === 0) return;
   socket.emit('attach', { cardIds, comboId });
-  selectedCards.clear();
+  clearSelection();
   attachMode = false;
   document.getElementById('modal-attach').style.display = 'none';
 }
@@ -646,7 +703,7 @@ document.getElementById('btn-register').onclick = () => {
   const cardIds = [...selectedCards];
   if (cardIds.length === 0) return;
   socket.emit('register', { cardIds });
-  selectedCards.clear();
+  clearSelection();
 };
 
 document.getElementById('btn-attach').onclick = () => {
@@ -669,7 +726,7 @@ document.getElementById('btn-attach').onclick = () => {
     });
     item.onclick = () => {
       socket.emit('attach', { cardIds, comboId: combo.id });
-      selectedCards.clear();
+      clearSelection();
       attachMode = false;
       document.getElementById('modal-attach').style.display = 'none';
     };
@@ -690,6 +747,7 @@ document.getElementById('btn-discard').onclick = () => {
   const cardEl = document.querySelector(`#my-hand [data-card-id="${cardIds[0]}"]`);
   if (cardEl) {
     cardEl.classList.remove('selected');
+    deselectCard(cardIds[0]);
     cardEl.classList.add('card-leaving');
     flyCard(cardEl.querySelector('.card'), document.getElementById('discard-card'));
     // 슬롯 너비를 0으로 접어서 빈 자리 없애기
@@ -702,11 +760,11 @@ document.getElementById('btn-discard').onclick = () => {
     });
     setTimeout(() => {
       socket.emit('discard', { cardId: cardIds[0] });
-      selectedCards.clear();
+      clearSelection();
     }, 220);
   } else {
     socket.emit('discard', { cardId: cardIds[0] });
-    selectedCards.clear();
+    clearSelection();
   }
 };
 
@@ -911,7 +969,8 @@ function renderResultsList() {
 
       const tags = [];
       if (isWin && lastResultsIsHula) tags.push({ text: '훌라', penalty: false });
-      if (!isWin && r.multiplier === 2) tags.push({ text: '미등록×2', penalty: true });
+      if (!isWin && lastResultsIsHula) tags.push({ text: `훌라벌금×${r.multiplier}`, penalty: true });
+      else if (!isWin && !r.registered) tags.push({ text: '미등록벌금×2', penalty: true });
       if (r.thankYouChange) {
         const unit = gameMode === 'multi' ? '원' : 'pt';
         tags.push({ text: `땡큐취소 벌금 ${r.thankYouChange > 0 ? '+' : ''}${r.thankYouChange.toLocaleString()}${unit}`, penalty: true });
@@ -1006,7 +1065,7 @@ document.getElementById('btn-results-again').onclick = () => {
   document.getElementById('overlay-gameend').style.display = 'none';
   document.getElementById('game-log').innerHTML = '';
   gameState = null;
-  selectedCards.clear();
+  clearSelection();
   myFixedSeat = null;
   lastTurnPlayerCode = null;
   if (gameMode === 'single') {

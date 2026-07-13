@@ -170,7 +170,26 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   transition: opacity 0.1s ease;
 }
 .card-slot.selected { z-index: 2; }
-.card-slot.selected .card { transform: translateY(-14px); box-shadow: 0 6px 16px rgba(255,215,0,0.9); border-color: gold; border-width: 2px; }
+/* 실제로 "뜬" 표시는 .portal-card(하단 참고)가 담당 - 원본은 자리만 차지하고 완전히 숨김 */
+.card-slot.selected .card { opacity: 0; }
+
+/* ── 선택 카드 포탈 ──────────────────────────────────────────────────
+   #my-hand는 overflow-x:auto라서 그 안에서 transform으로 띄우면 위가 잘린다.
+   그래서 이 컨테이너 밖(body)에 position:fixed로 복제본을 띄워서 표시한다. */
+.portal-card {
+  position: fixed;
+  border-radius: 6px; border: 2px solid gold;
+  background: var(--card-bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(11px, 1.2vw, 16px); font-weight: bold;
+  box-shadow: 0 6px 16px rgba(255,215,0,0.9);
+  pointer-events: none;
+  z-index: 50; /* .modal(100)보다 낮게: 붙이기 등 모달이 뜨면 그 아래로 가려지도록 */
+}
+.portal-card.red { color: var(--card-red); }
+.portal-card.black { color: var(--card-black); }
+.portal-card .card-inner span:first-child { font-size: clamp(16px, 2.2vw, 30px); }
+.portal-card .card-suit { font-size: clamp(18px, 2.4vw, 34px); }
 
 .card {
   width: clamp(44px, 5vw, 70px);
