@@ -380,7 +380,10 @@ async function endGame(game, winnerCode) {
   clearThankYouTimeout(game);
   game.status = 'ended';
 
-  const results = calculateResults(game, winnerCode);
+  const isHula = !!winnerCode && game.hulaWinnerCode === winnerCode;
+  game.hulaWinnerCode = null;
+
+  const results = calculateResults(game, winnerCode, isHula);
   // 실제 1등(덱 소진 시에도 포함)을 다음 판 선공 결정에 활용
   const actualWinnerCode = results.find(r => r.rank === 1)?.userCode || null;
 
@@ -424,7 +427,7 @@ async function endGame(game, winnerCode) {
   for (const p of game.players) {
     if (!p.isAI) {
       emitToPlayer(p.userCode, 'gameEnd', {
-        results, winnerCode: actualWinnerCode, winnerName, winMessage, newRank1
+        results, winnerCode: actualWinnerCode, winnerName, winMessage, newRank1, isHula
       });
     }
   }

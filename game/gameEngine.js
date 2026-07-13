@@ -37,7 +37,8 @@ function createGame(mode, players) {
     firstTurn: true,
     rank1Single: null,
     rank1Multi: null,
-    paused: false
+    paused: false,
+    hulaWinnerCode: null
   };
 }
 
@@ -135,6 +136,8 @@ function registerCards(game, playerCode, cardIds) {
   if (cards.length !== cardIds.length) return { ok: false, msg: '카드를 찾을 수 없습니다' };
   if (!isValidCombo(cards)) return { ok: false, msg: '유효하지 않은 조합입니다' };
 
+  const wasNeverRegistered = !player.registered;
+
   const type = getComboType(cards);
   const combo = { id: `combo_${comboIdCounter++}`, ownerId: playerCode, cards, type };
   game.combos.push(combo);
@@ -147,7 +150,12 @@ function registerCards(game, playerCode, cardIds) {
     game.thankYouTakerCard = null;
   }
 
-  if (player.hand.length === 0) return { ok: true, combo, win: true };
+  if (player.hand.length === 0) {
+    // 훌라: 게임 내내 한 번도 등록 안 하다가 이번 등록 한 번으로 손패가 전부 비어 승리
+    const isHula = wasNeverRegistered;
+    if (isHula) game.hulaWinnerCode = playerCode;
+    return { ok: true, combo, win: true, isHula };
+  }
   return { ok: true, combo };
 }
 
@@ -339,7 +347,7 @@ function activateThankYou(game, card, discarderCode = null) {
 }
 
 // Calculate final results
-function calculateResults(game, winnerCode = null) {
+function calculateResults(game, winnerCode = null, isHula = false) {
   const results = game.players.map(p => {
     const cardSum = handScore(p.hand);
     return {
@@ -393,21 +401,24 @@ function calculateResults(game, winnerCode = null) {
 
   const unit = game.mode === 'multi' ? 100 : 1;
   const winners = results.filter(r => r.rank === 1);
+  const losers = results.filter(r => r.rank !== 1);
+
+  // 패자별 배수: 기본 등록여부(1배/2배), 훌라면 2배 더 가중(2배/4배)
+  for (const l of losers) {
+    const base = l.registered ? 1 : 2;
+    l.multiplier = isHula ? base * 2 : base;
+  }
+  const totalFromLosers = losers.reduce((sum, l) => sum + l.cardSum * unit * l.multiplier, 0);
 
   // Calculate payments
   for (const r of results) {
     if (r.rank === 1) {
-      let total = 0;
-      for (const loser of results.filter(l => l.rank !== 1)) {
-        const multiplier = loser.registered ? 1 : 2;
-        total += loser.cardSum * unit * multiplier;
-      }
+      // 공동 1등이면 각자 패자 전체 합계를 그대로 받음(패자가 각 승자에게 자기 벌금을 낸다는 설계)
       r.multiplier = 1;
-      r.pointChange = total;
+      r.pointChange = totalFromLosers;
     } else {
-      const multiplier = r.registered ? 1 : 2;
-      r.multiplier = multiplier;
-      r.pointChange = -(r.cardSum * unit * multiplier);
+      // 공동 1등이면 승자 수만큼 곱해서 지불(승자 각각에게 벌금을 내는 구조)
+      r.pointChange = -(r.cardSum * unit * r.multiplier) * winners.length;
     }
     // 땡큐 취소 벌금/보상 합산
     r.thankYouChange = game.pendingChanges[r.userCode] || 0;

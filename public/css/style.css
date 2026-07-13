@@ -443,6 +443,35 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   50% { transform: translateY(-12px); }
 }
 
+/* ── 훌라 연출 (등록 없이 원턴 승리) ─────────────────────────────────── */
+.hula-stamp { position: absolute; left: 50%; top: -4px; transform: translate(-50%, -100%); z-index: 3; pointer-events: none; }
+.hula-rays {
+  position: absolute; left: 50%; top: 50%; width: 230px; height: 230px;
+  transform: translate(-50%, -50%) scale(0) rotate(0deg);
+  background: repeating-conic-gradient(rgba(255,226,138,0.85) 0deg 5deg, rgba(255,226,138,0) 5deg 26deg);
+  border-radius: 50%; opacity: 0;
+}
+.hula-burst {
+  position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0); opacity: 0;
+  background: radial-gradient(circle, #fff 0%, #ffe08a 25%, #ffd24a 50%, rgba(255,210,74,0) 72%);
+}
+.hula-text {
+  position: relative; z-index: 2; font-size: 40px; font-weight: 900; letter-spacing: 0.02em;
+  color: #ffd24a; text-shadow: 0 2px 0 #7a5c14, 0 5px 14px rgba(0,0,0,0.5);
+  opacity: 0; transform: scale(0.3) rotate(-10deg); display: inline-block;
+  -webkit-text-stroke: 1.5px #4a3208;
+}
+.hula-stamp.play .hula-rays { animation: hulaRaysOut 1s ease-out 0.15s forwards; }
+.hula-stamp.play .hula-burst { animation: hulaBurstOut 0.7s ease-out 0.15s forwards; }
+.hula-stamp.play .hula-text { animation: hulaTextPop 0.6s cubic-bezier(.28,1.55,.4,1) 0.18s forwards; }
+@keyframes hulaRaysOut { 0% { transform: translate(-50%, -50%) scale(0) rotate(0deg); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1) rotate(50deg); opacity: 0; } }
+@keyframes hulaBurstOut { 0% { transform: translate(-50%, -50%) scale(0); opacity: 1; } 60% { opacity: 0.9; } 100% { transform: translate(-50%, -50%) scale(15); opacity: 0; } }
+@keyframes hulaTextPop { 0% { opacity: 0; transform: scale(0.3) rotate(-10deg); } 55% { opacity: 1; transform: scale(1.18) rotate(4deg); } 100% { opacity: 1; transform: scale(1) rotate(-3deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .hula-stamp.play .hula-rays, .hula-stamp.play .hula-burst, .hula-stamp.play .hula-text { animation-duration: 0.01ms !important; }
+}
+
 /* ── 1등 등극 뱃지 연출 (승리 화면) ─────────────────────────────────── */
 .rank1-badge-slot { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; }
 .rank1-badge-emoji { position: relative; z-index: 2; font-size: 34px; opacity: 0; transform: scale(0); }

@@ -212,19 +212,34 @@ socket.on('deckEmpty', () => showNotif('카드 덱이 소진됐습니다! 이번
 
 // ── Render ─────────────────────────────────────────────────────────────
 let prevComboTotal = 0; // 이전 렌더 시점 콤보 카드 총 수
+let prevComboCounts = new Map(); // comboId → 이전 렌더 시점 카드 수 (붙이기 대상 조합 추적용)
 
 function render() {
   if (!gameState) return;
   const me = gameState.players.find(p => p.userCode === userCode);
   const others = getOtherSeats(myFixedSeat ?? me?.seatIndex);
 
-  const currentComboTotal = (gameState.combos || []).reduce((s, c) => s + c.cards.length, 0);
+  const combos = gameState.combos || [];
+  const currentComboTotal = combos.reduce((s, c) => s + c.cards.length, 0);
   const comboGrew = currentComboTotal > prevComboTotal;
-  prevComboTotal = currentComboTotal;
 
-  renderPlayer('top', others[0], comboGrew);
-  renderPlayer('left', others[1], comboGrew);
-  renderPlayer('right', others[2], comboGrew);
+  // 기존 조합 중 카드 수가 늘어난 것(=붙이기 대상)을 찾는다. 새로 등록된 조합은
+  // 아직 DOM에 없으므로 대상에서 제외하고 기존처럼 combos-area로 폴백한다.
+  let growComboEl = null;
+  for (const combo of combos) {
+    const prevCount = prevComboCounts.get(combo.id);
+    if (prevCount !== undefined && combo.cards.length > prevCount) {
+      growComboEl = document.querySelector(`.combo-group[data-combo-id="${combo.id}"]`);
+      break;
+    }
+  }
+
+  prevComboTotal = currentComboTotal;
+  prevComboCounts = new Map(combos.map(c => [c.id, c.cards.length]));
+
+  renderPlayer('top', others[0], comboGrew, growComboEl);
+  renderPlayer('left', others[1], comboGrew, growComboEl);
+  renderPlayer('right', others[2], comboGrew, growComboEl);
   renderMyArea(me);
   renderCenter();
   updateActionButtons(me);
@@ -242,7 +257,7 @@ function getOtherSeats(mySeat) {
   return [positions[1], positions[2], positions[0]]; // top, left, right
 }
 
-function renderPlayer(pos, player, comboGrew = false) {
+function renderPlayer(pos, player, comboGrew = false, growComboEl = null) {
   const el = document.getElementById(`player-${pos}`);
   if (!player) { el.style.visibility = 'hidden'; return; }
   el.style.visibility = '';
@@ -258,9 +273,10 @@ function renderPlayer(pos, player, comboGrew = false) {
     if (isThankYouTake) pendingThankYouPlayerCode = null;
     flyCard(fromEl, el);
   } else if (player.handCount < prevCount) {
-    // 등록/붙이기면 가운데(콤보 영역)로, 버리기면 버린더미로
+    // 등록/붙이기면 가운데(콤보 영역)로 — 붙이기라 대상 조합을 특정할 수 있으면
+    // 그 조합 쪽으로, 아니면(새로 등록) 콤보 영역 전체로. 버리기면 버린더미로.
     const toEl = comboGrew
-      ? document.getElementById('combos-area')
+      ? (growComboEl || document.getElementById('combos-area'))
       : document.getElementById('discard-card');
     flyCard(el, toEl, false, null, comboGrew ? 380 : 550);
   }
@@ -798,7 +814,7 @@ function updateTimer(startSeconds = 45) {
 }
 
 // ── Game End ───────────────────────────────────────────────────────────
-socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1 }) => {
+socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1, isHula }) => {
   clearInterval(timerInterval);
   releaseWakeLock();
 
@@ -810,6 +826,14 @@ socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1 })
   document.getElementById('win-avatar').textContent = winnerAvatar;
   document.getElementById('win-name').textContent = `${winnerName} 승리!`;
   document.getElementById('win-message').textContent = winMessage || '';
+
+  // 훌라 연출 (등록 없이 원턴 승리)
+  const hulaSlot = document.getElementById('win-hula-slot');
+  hulaSlot.classList.remove('play');
+  if (isHula) {
+    void hulaSlot.offsetWidth; // 애니메이션 재시작을 위한 강제 리플로우
+    hulaSlot.classList.add('play');
+  }
 
   // 새로 1위 등극 연출 (싱글=👑, 멀티=💎)
   const badgeSlot = document.getElementById('win-rank1-badge-slot');

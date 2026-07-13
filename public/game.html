@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라 - 게임</title>
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body class="game-body">
 
@@ -163,6 +163,11 @@
   <div id="overlay-gameend" style="display:none">
     <div id="confetti-container"></div>
     <div id="gameend-box">
+      <span id="win-hula-slot" class="hula-stamp">
+        <span class="hula-rays"></span>
+        <span class="hula-burst"></span>
+        <span class="hula-text">훌라!</span>
+      </span>
       <div id="win-trophy">🏆</div>
       <div id="win-announcement">
         <span id="win-rank1-badge-slot" class="rank1-badge-slot">
@@ -199,6 +204,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/game.js?v=7"></script>
+  <script src="js/game.js?v=8"></script>
 </body>
 </html>
