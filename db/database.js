@@ -24,12 +24,20 @@ async function init() {
       multiWins INTEGER DEFAULT 0,
       multiGames INTEGER DEFAULT 0,
       showOnline INTEGER DEFAULT 1,
+      singleHulaWins INTEGER DEFAULT 0,
+      multiHulaWins INTEGER DEFAULT 0,
       createdAt INTEGER DEFAULT (strftime('%s','now'))
     )
   `);
   try {
     await db.query(sql`ALTER TABLE users ADD COLUMN showOnline INTEGER DEFAULT 1`);
   } catch (e) { /* 이미 컬럼이 있으면 무시 (기존 DB 마이그레이션) */ }
+  try {
+    await db.query(sql`ALTER TABLE users ADD COLUMN singleHulaWins INTEGER DEFAULT 0`);
+  } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
+  try {
+    await db.query(sql`ALTER TABLE users ADD COLUMN multiHulaWins INTEGER DEFAULT 0`);
+  } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
 
   await db.query(sql`
     CREATE TABLE IF NOT EXISTS game_results (
@@ -89,19 +97,21 @@ async function setSetting(key, value) {
   await db.query(sql`INSERT OR REPLACE INTO settings (key, value) VALUES (${key}, ${value})`);
 }
 
-async function saveGameResult(gameId, mode, results) {
+async function saveGameResult(gameId, mode, results, isHula = false) {
   for (const r of results) {
     if (r.isAI) continue;
     await db.query(sql`
       INSERT INTO game_results (gameId, mode, userCode, rank, cardSum, pointChange, didRegister)
       VALUES (${gameId}, ${mode}, ${r.userCode}, ${r.rank}, ${r.cardSum}, ${r.pointChange}, ${r.didRegister ? 1 : 0})
     `);
+    const isHulaWinner = isHula && r.rank === 1;
     if (mode === 'multi') {
       await db.query(sql`
         UPDATE users SET
           multiBalance = MAX(0, multiBalance + ${r.pointChange}),
           multiWins = multiWins + ${r.rank === 1 ? 1 : 0},
-          multiGames = multiGames + 1
+          multiGames = multiGames + 1,
+          multiHulaWins = multiHulaWins + ${isHulaWinner ? 1 : 0}
         WHERE userCode = ${r.userCode}
       `);
     } else {
@@ -109,7 +119,8 @@ async function saveGameResult(gameId, mode, results) {
         UPDATE users SET
           singlePoints = MAX(0, singlePoints + ${r.pointChange}),
           singleWins = singleWins + ${r.rank === 1 ? 1 : 0},
-          singleGames = singleGames + 1
+          singleGames = singleGames + 1,
+          singleHulaWins = singleHulaWins + ${isHulaWinner ? 1 : 0}
         WHERE userCode = ${r.userCode}
       `);
     }
@@ -137,6 +148,17 @@ async function getSingleRanking() {
     FROM users
     ORDER BY singlePoints DESC,
              CAST(singleWins AS REAL) / CASE WHEN singleGames = 0 THEN 1 ELSE singleGames END DESC
+    LIMIT 20
+  `);
+}
+
+async function getHulaRanking() {
+  return db.query(sql`
+    SELECT userCode, userName, avatar, singleHulaWins, multiHulaWins,
+           (singleHulaWins + multiHulaWins) AS hulaWins
+    FROM users
+    WHERE (singleHulaWins + multiHulaWins) > 0
+    ORDER BY hulaWins DESC
     LIMIT 20
   `);
 }
@@ -169,5 +191,5 @@ async function chargeBalance(userCode, mode) {
 module.exports = {
   init, getUser, createUser, updateUser, getAllUsers, deleteUser,
   getSetting, setSetting, saveGameResult,
-  getMultiRanking, getSingleRanking, chargeBalance, getUserCount
+  getMultiRanking, getSingleRanking, getHulaRanking, chargeBalance, getUserCount
 };

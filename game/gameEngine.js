@@ -38,6 +38,8 @@ function createGame(mode, players) {
     firstTurn: true,
     rank1Single: null,
     rank1Multi: null,
+    hulaKingCode: null,
+    isDoubleEvent: false,
     paused: false,
     hulaWinnerCode: null
   };
@@ -65,7 +67,8 @@ function getPublicState(game, viewerCode = null) {
       singlePoints: p.userCode === viewerCode ? p.singlePoints : undefined,
       multiBalance: p.isAI ? undefined : p.multiBalance,
       isRank1Single: !p.isAI && !!game.rank1Single && p.userCode === game.rank1Single,
-      isRank1Multi: !p.isAI && !!game.rank1Multi && p.userCode === game.rank1Multi
+      isRank1Multi: !p.isAI && !!game.rank1Multi && p.userCode === game.rank1Multi,
+      isHulaKing: !p.isAI && !!game.hulaKingCode && p.userCode === game.hulaKingCode
     })),
     deck: { count: game.deck.length },
     discardPile: (() => {
@@ -87,7 +90,8 @@ function getPublicState(game, viewerCode = null) {
     thankYou: game.thankYou,
     thankYouTaker: game.thankYouTaker,
     firstTurn: game.firstTurn,
-    timerRemainingMs: game.timerRemainingMs ?? null
+    timerRemainingMs: game.timerRemainingMs ?? null,
+    isDoubleEvent: !!game.isDoubleEvent
   };
 }
 
@@ -364,7 +368,7 @@ function activateThankYou(game, card, discarderCode = null) {
 }
 
 // Calculate final results
-function calculateResults(game, winnerCode = null, isHula = false) {
+function calculateResults(game, winnerCode = null, isHula = false, isDoubleEvent = false) {
   const results = game.players.map(p => {
     const cardSum = handScore(p.hand);
     return {
@@ -432,7 +436,7 @@ function calculateResults(game, winnerCode = null, isHula = false) {
     if (r.rank === 1) {
       // 공동 1등이면 각자 패자 전체 합계를 그대로 받음(패자가 각 승자에게 자기 벌금을 낸다는 설계)
       r.multiplier = 1;
-      r.pointChange = totalFromLosers;
+      r.pointChange = isDoubleEvent ? totalFromLosers * 2 : totalFromLosers;
     } else {
       // 공동 1등이면 승자 수만큼 곱해서 지불(승자 각각에게 벌금을 내는 구조)
       r.pointChange = -(r.cardSum * unit * r.multiplier) * winners.length;

@@ -28,6 +28,12 @@ function rankBadgeHtml(p) {
   return p.isRank1Single ? '<span class="badge-icon">👑</span>' : '';
 }
 
+// 훌라왕이면 이름 텍스트를 골드로 (뱃지랑 별개, 이름이 나오는 모든 곳에 공통 적용)
+function nameGold(p, name) {
+  const n = name ?? p.userName ?? '';
+  return p.isHulaKing ? `<span class="name-gold">${n}</span>` : n;
+}
+
 // 이름/잔액이 잘려서 "..."로 안 보이게, 넘치면 폰트 크기를 줄여서 전체가 보이도록 함
 function fitText(el, minPx = 8) {
   el.style.fontSize = '';
@@ -130,6 +136,17 @@ socket.on('gameState', (state) => {
     markedCardSource = null;
     pendingThankYouPlayerCode = null;
     if (state.id !== gameState?.id) showDealingAnimation();
+    if (state.isDoubleEvent) {
+      const dblOverlay = document.getElementById('overlay-double');
+      dblOverlay.style.display = 'flex';
+      dblOverlay.classList.remove('play');
+      void dblOverlay.offsetWidth;
+      dblOverlay.classList.add('play');
+      setTimeout(() => {
+        dblOverlay.style.display = 'none';
+        dblOverlay.classList.remove('play');
+      }, 3000);
+    }
   }
   const newThankYouActive = !!state.thankYou?.active;
   prevThankYouActive = newThankYouActive;
@@ -285,7 +302,7 @@ function renderPlayer(pos, player, comboGrew = false, growComboEl = null) {
 
   const avatarEmoji = AVATAR_MAP[player.avatar] || (player.isAI ? '🤖' : '👤');
   const nameEl = el.querySelector('.player-name');
-  nameEl.innerHTML = rankBadgeHtml(player) + avatarEmoji + ' ' + player.userName;
+  nameEl.innerHTML = rankBadgeHtml(player) + avatarEmoji + ' ' + nameGold(player);
   fitText(nameEl);
   const balanceEl = el.querySelector('.player-balance');
   balanceEl.textContent = gameMode === 'multi' && player.multiBalance !== undefined
@@ -318,7 +335,7 @@ function renderMyArea(me) {
 
   const myAvatar = AVATAR_MAP[me.avatar] || '👤';
   const myNameEl = document.getElementById('my-name');
-  myNameEl.innerHTML = rankBadgeHtml(me) + myAvatar + ' ' + userName;
+  myNameEl.innerHTML = rankBadgeHtml(me) + myAvatar + ' ' + nameGold(me, userName);
   fitText(myNameEl);
   const myBalanceEl = document.getElementById('my-balance');
   myBalanceEl.textContent = gameMode === 'multi'
@@ -674,6 +691,41 @@ function cardName(card) {
   return `${suitSymbols[card.suit]}${valueNames[card.value] || card.value}`;
 }
 
+// game/cardUtils.js의 isValidCombo와 동일한 규칙 — 유효하지 않은 조합으로 등록 시도할 때
+// 서버 응답을 기다리지 않고 그 자리에서 바로 막기 위한 클라이언트측 사전검증 (판정 기준은 서버가 최종)
+function isCircularConsecutive(values) {
+  if (values.length < 2) return true;
+  const sorted = [...values].sort((a, b) => a - b);
+  let normal = true;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] - sorted[i - 1] !== 1) { normal = false; break; }
+  }
+  if (normal) return true;
+  const gaps = [];
+  for (let i = 1; i < sorted.length; i++) gaps.push(sorted[i] - sorted[i - 1]);
+  gaps.push(13 - sorted[sorted.length - 1] + sorted[0]);
+  const nonOne = gaps.filter(g => g !== 1);
+  return nonOne.length === 1;
+}
+function isValidSet(cards) {
+  if (cards.length < 2) return false;
+  const v = cards[0].value;
+  if (!cards.every(c => c.value === v)) return false;
+  if (cards.length === 2 && v !== 7) return false;
+  return true;
+}
+function isValidSequence(cards) {
+  const minLen = cards.some(c => c.value === 7) ? 2 : 3;
+  if (cards.length < minLen) return false;
+  const suit = cards[0].suit;
+  if (!cards.every(c => c.suit === suit)) return false;
+  return isCircularConsecutive(cards.map(c => c.value));
+}
+function isValidCombo(cards) {
+  const isSeven = cards.length === 1 && cards[0].value === 7;
+  return isSeven || isValidSet(cards) || isValidSequence(cards);
+}
+
 // ── Actions ────────────────────────────────────────────────────────────
 function isMyTurn() {
   return gameState?.currentPlayerCode === userCode;
@@ -727,6 +779,9 @@ function handleComboClick(comboId) {
 document.getElementById('btn-register').onclick = () => {
   const cardIds = [...selectedCards];
   if (cardIds.length === 0) return;
+  const me = gameState.players.find(p => p.userCode === userCode);
+  const cards = cardIds.map(id => me.hand.find(c => c.id === id)).filter(Boolean);
+  if (!isValidCombo(cards)) { showNotif('유효하지 않은 조합입니다', 'info'); return; }
   animateHandCardsLeaving(cardIds, document.getElementById('combos-area'), () => socket.emit('register', { cardIds }));
 };
 
@@ -881,14 +936,16 @@ function updateTimer(startSeconds = 45) {
 let lastResults = null;
 let lastResultsWinnerCode = null;
 let lastResultsIsHula = false;
+let lastResultsIsDoubleEvent = false;
 let readyStatusData = null; // { requiredCodes, readyCodes, deadlines } (멀티모드 "한 판 더" 준비 현황)
 let resultsCountdownInterval = null;
 
-socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1, isHula }) => {
+socket.on('gameEnd', ({ results, winnerCode, winnerName, winMessage, newRank1, isHula, isDoubleEvent }) => {
   clearInterval(timerInterval);
   releaseWakeLock();
   lastResultsWinnerCode = winnerCode;
   lastResultsIsHula = !!isHula;
+  lastResultsIsDoubleEvent = !!isDoubleEvent;
   readyStatusData = null;
 
   if (isHula) {
@@ -916,7 +973,7 @@ function showGameEndBox(results, winnerCode, winnerName, winMessage, newRank1) {
   const winnerResult = results.find(r => r.userCode === winnerCode);
   const winnerAvatar = AVATAR_MAP[winnerResult?.avatar] || '👤';
   document.getElementById('win-avatar').textContent = winnerAvatar;
-  document.getElementById('win-name').textContent = `${winnerName} 승리!`;
+  document.getElementById('win-name').innerHTML = `${nameGold(winnerResult || {}, winnerName)} 승리!`;
   document.getElementById('win-message').textContent = winMessage || '';
 
   // 새로 1위 등극 연출 (싱글=👑, 멀티=💎)
@@ -948,6 +1005,7 @@ function showResults(results) {
   const overlay = document.getElementById('overlay-results');
   overlay.style.display = 'flex';
   lastResults = results;
+  document.getElementById('double-event-banner').style.display = lastResultsIsDoubleEvent ? '' : 'none';
   renderResultsList();
   updateReadyUI();
 
@@ -977,13 +1035,14 @@ function renderResultsList() {
 
       const tags = [];
       if (isWin && lastResultsIsHula) tags.push({ text: '훌라', penalty: false });
+      if (isWin && lastResultsIsDoubleEvent) tags.push({ text: '⚡2배 적용', penalty: false, double: true });
       if (!isWin && lastResultsIsHula) tags.push({ text: `훌라 벌금×${r.multiplier}`, penalty: true });
       else if (!isWin && !r.registered) tags.push({ text: '미등록 벌금×2', penalty: true });
       if (r.thankYouChange) {
         const unit = gameMode === 'multi' ? '원' : 'pt';
         tags.push({ text: `땡큐 취소 벌금 ${r.thankYouChange > 0 ? '+' : ''}${r.thankYouChange.toLocaleString()}${unit}`, penalty: true });
       }
-      const tagsHtml = tags.map(t => `<span class="ptag${t.penalty ? ' penalty' : ''}">${t.text}</span>`).join('');
+      const tagsHtml = tags.map(t => `<span class="ptag${t.penalty ? ' penalty' : ''}${t.double ? ' double' : ''}">${t.text}</span>`).join('');
 
       let readyHtml = '';
       if (gameMode === 'multi' && !r.isAI) {
@@ -1009,7 +1068,7 @@ function renderResultsList() {
       return `<div class="${cardClass}">
         <div class="pcard-top">
           <span class="prank">${r.rank}</span>
-          <span class="pname">${avatarEmoji} ${r.userName}</span>
+          <span class="pname">${avatarEmoji} ${rankBadgeHtml(r)}${nameGold(r)}</span>
           ${tagsHtml}
           ${readyHtml}
           ${isMe ? '<span class="pme-badge">나</span>' : ''}

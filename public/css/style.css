@@ -179,6 +179,18 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .prank { width: 22px; text-align: center; font-size: 12px; font-weight: 800; color: var(--text-dim); flex-shrink: 0; }
 .prow.rank1 .prank { font-size: 16px; }
 
+/* 훌라왕: 어디서든 이름 텍스트를 골드로 (뱃지/테두리 아님, 텍스트 색만) */
+.name-gold { color: #ffd24a; text-shadow: 0 1px 0 #7a5c14, 0 0 6px rgba(255,210,74,0.5); }
+
+/* 랭킹 훌라 탭 1위: 순위 숫자 대신 미니 훌라 로고(로고체 축소, 살짝 삐딱) */
+.rank-logo {
+  width: 22px; text-align: center; flex-shrink: 0;
+  font-size: 9px; font-weight: 900; line-height: 1; letter-spacing: -0.5px;
+  color: #ffd24a; text-shadow: 0 1px 0 #7a5c14, 0 2px 4px rgba(0,0,0,0.5);
+  -webkit-text-stroke: 0.4px #4a3208;
+  transform: rotate(-8deg);
+}
+
 .pav-wrap { position: relative; flex-shrink: 0; }
 .pav { width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 17px; }
 
@@ -245,7 +257,7 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 .game-body { background: var(--green); }
 
 #game-table {
-  width: 100vw; height: 100vh;
+  width: 100vw; height: 100vh; height: 100dvh;
   display: grid;
   grid-template-areas:
     ". top ."
@@ -650,6 +662,29 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
   #overlay-hula.play .hula-rays, #overlay-hula.play .hula-burst, #overlay-hula.play .hula-text { animation-duration: 0.01ms !important; }
 }
 
+/* ── 깜짝 2배 이벤트 판 (딜링 직후, 3초 재생 후 완전히 사라짐 — 상시 배지 없음) ── */
+#overlay-double {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center; z-index: 510;
+  background: rgba(8,14,10,0); opacity: 0; pointer-events: none;
+}
+#overlay-double.play { animation: hulaOverlayInOut 3s ease-out forwards; }
+.double-stamp { display: flex; flex-direction: column; align-items: center; }
+.double-text {
+  position: relative; z-index: 2; font-size: 40px; font-weight: 900; letter-spacing: 0.02em;
+  color: #ffd24a; text-shadow: 0 2px 0 #7a5c14, 0 6px 18px rgba(0,0,0,0.6);
+  opacity: 0; transform: scale(0.3) rotate(-10deg); display: inline-block;
+  -webkit-text-stroke: 1.5px #4a3208;
+}
+.double-sub { position: relative; z-index: 2; font-size: 14px; color: #fff; margin-top: 8px; opacity: 0; }
+#overlay-double.play .hula-rays { animation: hulaRaysOut 1s ease-out 0.2s forwards; }
+#overlay-double.play .double-text { animation: hulaTextPop 0.6s cubic-bezier(.28,1.55,.4,1) 0.24s forwards; }
+#overlay-double.play .double-sub { animation: rank1SubFade 1s ease-out 0.5s forwards; }
+@media (prefers-reduced-motion: reduce) {
+  #overlay-double.play { animation-duration: 0.01ms !important; }
+  #overlay-double.play .hula-rays, #overlay-double.play .double-text, #overlay-double.play .double-sub { animation-duration: 0.01ms !important; }
+}
+
 /* ── 1등 등극 뱃지 연출 (승리 화면) ─────────────────────────────────── */
 .rank1-badge-slot { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; }
 .rank1-badge-emoji { position: relative; z-index: 2; font-size: 34px; opacity: 0; transform: scale(0); }
@@ -701,6 +736,9 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 .pcard .pme-badge { font-size: 8.5px; background: rgba(90,169,201,0.2); color: #8fd0ec; padding: 1px 5px; border-radius: 20px; flex: none; }
 .pcard .ptag { font-size: 8.5px; background: rgba(255,224,138,0.15); color: #ffe08a; padding: 1px 6px; border-radius: 20px; flex: none; white-space: nowrap; }
 .pcard .ptag.penalty { background: rgba(224,161,92,0.15); color: #e0a15c; }
+.pcard .ptag.double { background: rgba(255,180,60,0.22); color: #ffcf7a; }
+
+#double-event-banner { text-align: center; font-size: 11px; font-weight: 800; color: #ffd24a; background: rgba(201,168,76,0.15); border: 1px solid rgba(201,168,76,0.4); border-radius: 8px; padding: 6px 0; margin: -2px 0 2px; }
 .pcard .pready { flex: none; font-size: 10.5px; }
 .pcard-bottom { display: flex; gap: 7px; align-items: baseline; font-size: 10px; color: #999; padding-left: 18px; flex-wrap: wrap; }
 .pcard-bottom b { font-size: 11px; }

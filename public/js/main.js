@@ -20,6 +20,17 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
+// ── 뱃지(👑싱글1위/💎멀티1위) & 훌라왕 골드 텍스트 ─────────────────────────
+function badgeIcons(p) {
+  return (p.isRank1Single ? '👑' : '') + (p.isRank1Multi ? '💎' : '');
+}
+function nameWithBadges(p, name) {
+  const n = name ?? p.userName ?? '';
+  const nameHtml = p.isHulaKing ? `<span class="name-gold">${n}</span>` : n;
+  const icons = badgeIcons(p);
+  return icons ? `${icons} ${nameHtml}` : nameHtml;
+}
+
 document.getElementById('login-hula-logo')?.classList.add('play');
 
 // ── Login ──────────────────────────────────────────────────────────────
@@ -74,7 +85,7 @@ socket.on('disconnect', () => {
 });
 
 function updateMainScreen() {
-  document.getElementById('main-username').textContent = me.userName;
+  document.getElementById('main-username').innerHTML = nameWithBadges(me);
   document.getElementById('single-balance').textContent = `${me.singlePoints?.toLocaleString()}점 보유`;
   document.getElementById('multi-balance').textContent = `₩${me.multiBalance?.toLocaleString()} 보유`;
   const avatarEl = document.getElementById('main-avatar');
@@ -115,7 +126,7 @@ socket.on('joinMultiError', (msg) => {
 socket.on('waitingRoom', ({ players }) => {
   const el = document.getElementById('waiting-players');
   el.innerHTML = players.map(p =>
-    `<div class="waiting-player">${p.userName}${p.isAdmin ? ' (관리자)' : ''}</div>`
+    `<div class="waiting-player">${nameWithBadges(p)}${p.isAdmin ? ' (관리자)' : ''}</div>`
   ).join('');
 });
 
@@ -183,7 +194,7 @@ document.getElementById('btn-settings').onclick = () => {
   document.getElementById('multi-balance-display').textContent = `₩${me.multiBalance?.toLocaleString()}`;
   document.getElementById('input-show-online').checked = me.showOnline !== false;
   document.getElementById('settings-avatar-big').textContent = (AVATARS.find(a => a.key === me.avatar) || AVATARS[0]).emoji;
-  document.getElementById('settings-profile-name').textContent = me.userName;
+  document.getElementById('settings-profile-name').innerHTML = nameWithBadges(me);
   renderAvatarGrid(me.avatar || 'person');
   if (isAdmin) {
     document.getElementById('admin-settings').style.display = '';
@@ -315,23 +326,24 @@ window.deleteUser = (code) => {
 };
 
 // ── Ranking ────────────────────────────────────────────────────────────
+const RANKING_MODES = ['single', 'multi', 'hula'];
+let activeRankingMode = 'single';
 document.getElementById('btn-ranking').onclick = () => {
   socket.emit('getRanking');
-  document.getElementById('tab-single').classList.add('active');
-  document.getElementById('tab-multi').classList.remove('active');
+  setRankingTab('single');
   showScreen('screen-ranking');
 };
 document.getElementById('btn-back-ranking').onclick = () => showScreen('screen-main');
-document.getElementById('tab-single').onclick = () => {
-  document.getElementById('tab-single').classList.add('active');
-  document.getElementById('tab-multi').classList.remove('active');
-  renderRanking('single');
-};
-document.getElementById('tab-multi').onclick = () => {
-  document.getElementById('tab-multi').classList.add('active');
-  document.getElementById('tab-single').classList.remove('active');
-  renderRanking('multi');
-};
+function setRankingTab(mode) {
+  activeRankingMode = mode;
+  for (const m of RANKING_MODES) {
+    document.getElementById(`tab-${m}`).classList.toggle('active', m === mode);
+  }
+  renderRanking(mode);
+}
+document.getElementById('tab-single').onclick = () => setRankingTab('single');
+document.getElementById('tab-multi').onclick = () => setRankingTab('multi');
+document.getElementById('tab-hula').onclick = () => setRankingTab('hula');
 socket.on('ranking', (data) => {
   rankingData = data;
   renderRanking('single');
@@ -339,11 +351,10 @@ socket.on('ranking', (data) => {
 socket.on('presenceList', ({ online }) => {
   if (!rankingData) return;
   const set = new Set(online);
-  for (const mode of ['single', 'multi']) {
+  for (const mode of RANKING_MODES) {
     for (const r of rankingData[mode] || []) r.online = set.has(r.userCode);
   }
-  const activeMode = document.getElementById('tab-single').classList.contains('active') ? 'single' : 'multi';
-  renderRanking(activeMode);
+  renderRanking(activeRankingMode);
 });
 function tryInvite(userCode, userName) {
   if (window.presencePending) { alert('이미 대기 중인 초대가 있어요'); return; }
@@ -360,6 +371,27 @@ function renderRanking(mode) {
   const rows = rankingData[mode] || [];
   const list = document.getElementById('ranking-list');
   if (rows.length === 0) { list.innerHTML = '<p style="color:#aaa;text-align:center;padding:16px">데이터 없음</p>'; return; }
+
+  if (mode === 'hula') {
+    list.innerHTML = rows.map((r, i) => {
+      const avatarEmoji = (AVATARS.find(a => a.key === r.avatar) || AVATARS[0]).emoji;
+      const isRank1 = i === 0;
+      const isMe = me && r.userCode === me.userCode;
+      const rankInner = isRank1 ? '<div class="rank-logo">훌라</div>' : `<div class="prank">${i + 1}</div>`;
+      const pname = isRank1 ? `<span class="pname name-gold">${r.userName}</span>` : `<span class="pname">${r.userName}</span>`;
+      return `<div class="prow${isRank1 ? ' rank1' : ''}${isMe ? ' me' : ''}">
+        ${rankInner}
+        <div class="pav-wrap"><div class="pav">${avatarEmoji}</div></div>
+        <div class="pbody">
+          <div class="pname-row">${pname}${isMe ? '<span class="pme-tag">나</span>' : ''}</div>
+          <div class="pstat-row"><span>싱글 ${r.singleHulaWins ?? 0}회 · 멀티 ${r.multiHulaWins ?? 0}회</span></div>
+        </div>
+        <div class="pvalue"><div class="amt${isRank1 ? ' name-gold' : ''}">${r.hulaWins ?? 0}회</div></div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
   list.innerHTML = rows.map((r, i) => {
     const wins = mode === 'multi' ? r.multiWins : r.singleWins;
     const games = mode === 'multi' ? r.multiGames : r.singleGames;
@@ -371,6 +403,7 @@ function renderRanking(mode) {
     const rowClasses = ['prow', isRank1 && 'rank1', isMe && 'me', canInvite && 'presence-clickable'].filter(Boolean).join(' ');
     const rankLabel = isRank1 ? (mode === 'multi' ? '💎' : '👑') : String(i + 1);
     const amount = mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : (r.singlePoints ?? 0).toLocaleString() + '점';
+    const pname = r.isHulaKing ? `<span class="pname name-gold">${r.userName}</span>` : `<span class="pname">${r.userName}</span>`;
     return `<div class="${rowClasses}"${canInvite ? ` data-usercode="${r.userCode}" data-username="${r.userName}"` : ''}>
       <div class="prank">${rankLabel}</div>
       <div class="pav-wrap">
@@ -378,7 +411,7 @@ function renderRanking(mode) {
         <div class="presence-dot${r.online ? ' on' : ''}"></div>
       </div>
       <div class="pbody">
-        <div class="pname-row"><span class="pname">${r.userName}</span>${isMe ? '<span class="pme-tag">나</span>' : ''}</div>
+        <div class="pname-row">${pname}${isMe ? '<span class="pme-tag">나</span>' : ''}</div>
         <div class="pstat-row"><span>${(wins ?? 0).toLocaleString()}승 ${losses.toLocaleString()}패</span></div>
       </div>
       <div class="pvalue"><div class="amt">${amount}</div><div class="rate">${winRate(wins ?? 0, games ?? 0)}</div></div>

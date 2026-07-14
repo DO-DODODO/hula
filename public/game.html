@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라 - 게임</title>
-  <link rel="stylesheet" href="css/style.css?v=12">
+  <link rel="stylesheet" href="css/style.css?v=13">
 </head>
 <body class="game-body">
 
@@ -168,6 +168,15 @@
     </span>
   </div>
 
+  <!-- 깜짝 2배 이벤트 판 오버레이 (딜링 직후 3초 재생 후 완전히 사라짐) -->
+  <div id="overlay-double" style="display:none">
+    <span class="hula-stamp double-stamp">
+      <span class="hula-rays"></span>
+      <span class="double-text">⚡2배 이벤트⚡</span>
+      <span class="double-sub">이번 판 승자는 정산 금액 2배!</span>
+    </span>
+  </div>
+
   <!-- Game End overlay -->
   <div id="overlay-gameend" style="display:none">
     <div id="confetti-container"></div>
@@ -192,6 +201,7 @@
   <div id="overlay-results" style="display:none">
     <div id="results-box">
       <h2>정산 결과</h2>
+      <div id="double-event-banner" style="display:none">⚡ 이번 판은 2배 이벤트였어요!</div>
       <div id="results-list"></div>
       <div style="display:flex;gap:12px;justify-content:center">
         <button id="btn-results-again" class="btn-primary">한 판 더!</button>
@@ -202,7 +212,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/game.js?v=19"></script>
+  <script src="js/game.js?v=20"></script>
   <script src="js/presence.js?v=1"></script>
 </body>
 </html>

@@ -78,6 +78,27 @@ function broadcastPresence() {
   }
 }
 
+// ── 뱃지(👑싱글1위/💎멀티1위/훌라왕) ──────────────────────────────────────────
+// 게임 화면은 game.rank1Single/rank1Multi/hulaKingCode 스냅샷(snapshotRank1)을 쓰고,
+// 로비류 화면(메인/설정/대기실 등)은 매번 최신값을 여기서 조회해서 붙인다.
+async function getGlobalBadges() {
+  const [singleRanking, multiRanking, hulaRanking] = await Promise.all([
+    db.getSingleRanking(), db.getMultiRanking(), db.getHulaRanking()
+  ]);
+  return {
+    rank1Single: singleRanking[0]?.userCode ?? null,
+    rank1Multi: multiRanking[0]?.userCode ?? null,
+    hulaKing: hulaRanking[0]?.userCode ?? null
+  };
+}
+function badgeFlagsFor(userCode, badges) {
+  return {
+    isRank1Single: !!badges.rank1Single && userCode === badges.rank1Single,
+    isRank1Multi: !!badges.rank1Multi && userCode === badges.rank1Multi,
+    isHulaKing: !!badges.hulaKing && userCode === badges.hulaKing
+  };
+}
+
 // 초대 때문에 자동 일시정지된 싱글 게임을 원상복구 (거절/취소/연결끊김 시 호출)
 function resumeIfInvitePaused(userCode) {
   const g = singleGames.get(userCode);
@@ -155,11 +176,18 @@ async function startReadyPhase() {
   broadcastReadyStatus();
 }
 
-// 게임 시작 시점의 전역 1위(싱글 포인트 / 멀티 잔액)를 스냅샷으로 저장 (1등 뱃지, 등극 연출 판단용)
+const DOUBLE_EVENT_CHANCE = 0.1; // 깜짝 2배 이벤트 판 확률
+
+// 게임 시작 시점의 전역 1위(싱글 포인트 / 멀티 잔액 / 훌라왕)를 스냅샷으로 저장 (뱃지 판단용),
+// 동시에 이번 판이 "2배 이벤트 판"인지도 여기서 함께 굴림 (매 게임 생성 시 한 번만)
 async function snapshotRank1(game) {
-  const [singleRanking, multiRanking] = await Promise.all([db.getSingleRanking(), db.getMultiRanking()]);
+  const [singleRanking, multiRanking, hulaRanking] = await Promise.all([
+    db.getSingleRanking(), db.getMultiRanking(), db.getHulaRanking()
+  ]);
   game.rank1Single = singleRanking[0]?.userCode ?? null;
   game.rank1Multi = multiRanking[0]?.userCode ?? null;
+  game.hulaKingCode = hulaRanking[0]?.userCode ?? null;
+  game.isDoubleEvent = Math.random() < DOUBLE_EVENT_CHANCE;
 }
 
 // ── Timer ──────────────────────────────────────────────────────────────────
@@ -172,6 +200,17 @@ function startTimer(game, durationMs = 45000) {
 
 function clearTimer(game) {
   if (game.timer) { clearTimeout(game.timer); game.timer = null; }
+}
+
+// 게임 시작 첫 턴: 2배 이벤트 판이면 클라이언트가 "⚡2배 이벤트⚡" 오버레이(3초)를 다 보여줄 때까지
+// 타이머/AI 턴을 미뤄서, 오버레이 보는 동안 시간이 깎이지 않게 한다.
+function startInitialTurn(game, cur, aiDelayMs) {
+  const delay = game.isDoubleEvent ? 3000 : 0;
+  setTimeout(() => {
+    if (game.status !== 'playing' || game.paused) return;
+    startTimer(game);
+    if (cur.isAI) setTimeout(() => runAITurn(game, cur), aiDelayMs);
+  }, delay);
 }
 
 function handleTimeout(game) {
@@ -486,11 +525,14 @@ async function endGame(game, winnerCode) {
   const isHula = !!winnerCode && game.hulaWinnerCode === winnerCode;
   game.hulaWinnerCode = null;
 
-  const results = calculateResults(game, winnerCode, isHula);
+  const results = calculateResults(game, winnerCode, isHula, game.isDoubleEvent);
   // 실제 1등(덱 소진 시에도 포함)을 다음 판 선공 결정에 활용
   const actualWinnerCode = results.find(r => r.rank === 1)?.userCode || null;
 
-  await db.saveGameResult(game.id, game.mode, results);
+  await db.saveGameResult(game.id, game.mode, results, isHula);
+  // 방금 훌라로 이겼으면 훌라왕이 바로 갱신됐을 수 있음 — 정산 화면에 즉시 반영
+  const hulaRanking = await db.getHulaRanking();
+  game.hulaKingCode = hulaRanking[0]?.userCode ?? null;
 
   // "새로 1위 등극" 판단: 게임 시작 시점 1위 스냅샷과 게임 종료 후 최신 랭킹을 비교
   // + 게임판(뒤에 깔린 캐릭터 뱃지)도 최신 1위로 즉시 갱신
@@ -521,6 +563,9 @@ async function endGame(game, winnerCode) {
       r.totalWins = game.mode === 'multi' ? (user?.multiWins ?? 0) : (user?.singleWins ?? 0);
       r.totalGames = game.mode === 'multi' ? (user?.multiGames ?? 0) : (user?.singleGames ?? 0);
     }
+    r.isRank1Single = !r.isAI && !!game.rank1Single && r.userCode === game.rank1Single;
+    r.isRank1Multi = !r.isAI && !!game.rank1Multi && r.userCode === game.rank1Multi;
+    r.isHulaKing = !r.isAI && !!game.hulaKingCode && r.userCode === game.hulaKingCode;
   }
 
   const winnerName = results.find(r => r.rank === 1)?.userName;
@@ -530,7 +575,8 @@ async function endGame(game, winnerCode) {
   for (const p of game.players) {
     if (!p.isAI) {
       emitToPlayer(p.userCode, 'gameEnd', {
-        results, winnerCode: actualWinnerCode, winnerName, winMessage, newRank1, isHula
+        results, winnerCode: actualWinnerCode, winnerName, winMessage, newRank1, isHula,
+        isDoubleEvent: !!game.isDoubleEvent
       });
     }
   }
@@ -579,12 +625,14 @@ io.on('connection', (socket) => {
     }
 
     sessions.set(socket.id, { userCode: user.userCode, userName: user.userName, showOnline: user.showOnline !== 0, isAdmin: user.isAdmin === 1 });
+    const myBadges = badgeFlagsFor(user.userCode, await getGlobalBadges());
     socket.emit('loginSuccess', {
       userCode: user.userCode, userName: user.userName,
       isAdmin: user.isAdmin === 1,
       singlePoints: user.singlePoints, multiBalance: user.multiBalance,
       winMessage: user.winMessage, avatar: user.avatar || 'person',
-      showOnline: user.showOnline !== 0
+      showOnline: user.showOnline !== 0,
+      ...myBadges
     });
     // 멀티 게임 재연결: 싱글보다 멀티 우선
     if (activeGame && activeGame.status === 'playing') {
@@ -857,8 +905,7 @@ io.on('connection', (socket) => {
     socket.emit('gameState', getPublicState(game, user.userCode));
 
     const cur = getCurrentPlayer(game);
-    startTimer(game);
-    if (cur.isAI) setTimeout(() => runAITurn(game, cur), 5000 + Math.random() * 3000);
+    startInitialTurn(game, cur, 5000 + Math.random() * 3000);
   });
 
   socket.on('joinMulti', async ({ entryCode }) => {
@@ -892,10 +939,11 @@ io.on('connection', (socket) => {
   });
 
   async function broadcastWaiting() {
+    const badges = await getGlobalBadges();
     const players = [];
     for (const [uc] of waitingRoom) {
       const u = await db.getUser(uc);
-      if (u) players.push({ userCode: u.userCode, userName: u.userName, isAdmin: u.isAdmin === 1 });
+      if (u) players.push({ userCode: u.userCode, userName: u.userName, isAdmin: u.isAdmin === 1, ...badgeFlagsFor(u.userCode, badges) });
     }
     io.to('waiting').emit('waitingRoom', { players });
   }
@@ -946,8 +994,7 @@ io.on('connection', (socket) => {
     }
 
     const cur = getCurrentPlayer(activeGame);
-    startTimer(activeGame);
-    if (cur.isAI) setTimeout(() => runAITurn(activeGame, cur), 2000 + Math.random() * 1000);
+    startInitialTurn(activeGame, cur, 2000 + Math.random() * 1000);
   });
 
   socket.on('adminStopGame', async () => {
@@ -1216,8 +1263,7 @@ io.on('connection', (socket) => {
     }
 
     const cur = getCurrentPlayer(activeGame);
-    startTimer(activeGame);
-    if (cur.isAI) setTimeout(() => runAITurn(activeGame, cur), 2000 + Math.random() * 1000);
+    startInitialTurn(activeGame, cur, 2000 + Math.random() * 1000);
   });
 
   socket.on('readyForNextGame', () => {
@@ -1230,10 +1276,17 @@ io.on('connection', (socket) => {
     const sess = sessions.get(socket.id);
     const canSee = sess?.isAdmin || sess?.showOnline !== false;
     const online = new Set(canSee ? visibleOnlineCodes() : []);
-    const mark = rows => rows.map(r => ({ ...r, online: online.has(r.userCode) }));
+    const [multiRows, singleRows, hulaRows] = await Promise.all([
+      db.getMultiRanking(), db.getSingleRanking(), db.getHulaRanking()
+    ]);
+    const hulaKingCode = hulaRows[0]?.userCode ?? null;
+    const mark = rows => rows.map(r => ({
+      ...r, online: online.has(r.userCode), isHulaKing: !!hulaKingCode && r.userCode === hulaKingCode
+    }));
     socket.emit('ranking', {
-      multi: mark(await db.getMultiRanking()),
-      single: mark(await db.getSingleRanking())
+      multi: mark(multiRows),
+      single: mark(singleRows),
+      hula: mark(hulaRows)
     });
   });
 
