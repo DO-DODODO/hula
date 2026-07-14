@@ -1032,7 +1032,7 @@ function renderResultsList() {
       const games = r.totalGames ?? 0;
       const wins = r.totalWins ?? 0;
       const losses = games - wins;
-      const rate = r.isAI ? '' : (!games ? '-' : `${wins}승 ${losses}패(${Math.round((wins / games) * 100)}%)`);
+      const rate = r.isAI ? '' : (!games ? '-' : `${wins}승 ${losses}패(${Math.floor((wins / games) * 100)}%)`);
 
       const tags = [];
       if (isWin && lastResultsIsHula) tags.push({ text: '훌라', penalty: false });

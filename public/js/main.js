@@ -363,7 +363,7 @@ function tryInvite(userCode, userName) {
 }
 function winRate(wins, games) {
   if (!games) return '-';
-  return Math.round((wins / games) * 100).toLocaleString() + '%';
+  return Math.floor((wins / games) * 100).toLocaleString() + '%';
 }
 
 function renderRanking(mode) {
