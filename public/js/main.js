@@ -373,11 +373,13 @@ function renderRanking(mode) {
   if (rows.length === 0) { list.innerHTML = '<p style="color:#aaa;text-align:center;padding:16px">데이터 없음</p>'; return; }
 
   if (mode === 'hula') {
+    let displayRank = 0;
     list.innerHTML = rows.map((r, i) => {
+      if (i === 0 || r.hulaWins !== rows[i - 1].hulaWins) displayRank = i + 1;
       const avatarEmoji = (AVATARS.find(a => a.key === r.avatar) || AVATARS[0]).emoji;
-      const isRank1 = i === 0;
+      const isRank1 = displayRank === 1;
       const isMe = me && r.userCode === me.userCode;
-      const rankInner = isRank1 ? '<div class="rank-logo">훌라</div>' : `<div class="prank">${i + 1}</div>`;
+      const rankInner = isRank1 ? '<div class="rank-logo">훌라</div>' : `<div class="prank">${displayRank}</div>`;
       const pname = isRank1 ? `<span class="pname name-gold">${r.userName}</span>` : `<span class="pname">${r.userName}</span>`;
       return `<div class="prow${isRank1 ? ' rank1' : ''}${isMe ? ' me' : ''}">
         ${rankInner}

@@ -158,7 +158,7 @@ async function getHulaRanking() {
            (singleHulaWins + multiHulaWins) AS hulaWins
     FROM users
     WHERE (singleHulaWins + multiHulaWins) > 0
-    ORDER BY hulaWins DESC
+    ORDER BY hulaWins DESC, userName ASC
     LIMIT 20
   `);
 }

@@ -257,7 +257,7 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 .game-body { background: var(--green); }
 
 #game-table {
-  width: 100vw; height: 100vh; height: 100dvh;
+  width: 100vw; height: 100vh;
   display: grid;
   grid-template-areas:
     ". top ."
@@ -734,7 +734,7 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 .pcard.win .prank { color: var(--gold); }
 .pcard .pname { font-size: 12px; font-weight: 700; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcard .pme-badge { font-size: 8.5px; background: rgba(90,169,201,0.2); color: #8fd0ec; padding: 1px 5px; border-radius: 20px; flex: none; }
-.pcard .ptag { font-size: 8.5px; background: rgba(255,224,138,0.15); color: #ffe08a; padding: 1px 6px; border-radius: 20px; flex: none; white-space: nowrap; }
+.pcard .ptag { font-size: 8.5px; line-height: 12px; background: rgba(255,224,138,0.15); color: #ffe08a; padding: 1px 6px; border-radius: 20px; flex: none; white-space: nowrap; }
 .pcard .ptag.penalty { background: rgba(224,161,92,0.15); color: #e0a15c; }
 .pcard .ptag.double { background: rgba(255,180,60,0.22); color: #ffcf7a; }
 

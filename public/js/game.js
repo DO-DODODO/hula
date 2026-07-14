@@ -629,7 +629,8 @@ function animateHandCardsLeaving(cardIds, toEl, onDone) {
       cardEl.style.marginLeft = '0';
     });
   }
-  if (found) setTimeout(onDone, 150);
+  // flyCard 기본 duration(380ms)과 맞춰서, 카드가 다 날아간 뒤에 서버 반영되게 함
+  if (found) setTimeout(onDone, 380);
   else onDone();
 }
 
@@ -1068,7 +1069,7 @@ function renderResultsList() {
       return `<div class="${cardClass}">
         <div class="pcard-top">
           <span class="prank">${r.rank}</span>
-          <span class="pname">${avatarEmoji} ${rankBadgeHtml(r)}${nameGold(r)}</span>
+          <span class="pname">${rankBadgeHtml(r)}${avatarEmoji} ${nameGold(r)}</span>
           ${tagsHtml}
           ${readyHtml}
           ${isMe ? '<span class="pme-badge">나</span>' : ''}
