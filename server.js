@@ -31,6 +31,11 @@ let readyPhase = null; // { requiredCodes: Set, readyCodes: Set, deadlines: Map(
 const entryAttempts = new Map(); // socket.id → 시도 횟수
 const entryBlocked = new Set();  // socket.id → 차단
 
+// ── 접속중 표시 & 초대 ────────────────────────────────────────────────────
+const presenceVisible = new Set(); // userCode → 탭이 보이는 중(연결+포커스)
+const pendingInvites = new Map();  // fromCode(관리자) → { toCode, wasPlayingSingle }
+const inviteApprovedWaiting = new Map(); // userCode → 대기실 자동입장 만료시각(ms), 페이지 이동 후 재접속용
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function getSocketId(userCode) {
@@ -51,6 +56,35 @@ function broadcastGame(game) {
       emitToPlayer(p.userCode, 'gameState', getPublicState(game, p.userCode));
     }
   }
+}
+
+// ── 접속중 표시 ────────────────────────────────────────────────────────────
+function visibleOnlineCodes() {
+  const out = [];
+  for (const uc of presenceVisible) {
+    const sid = getSocketId(uc);
+    const sess = sid && sessions.get(sid);
+    if (sess && sess.showOnline !== false) out.push(uc);
+  }
+  return out;
+}
+
+function broadcastPresence() {
+  io.emit('presenceList', { online: visibleOnlineCodes() });
+}
+
+// 초대 때문에 자동 일시정지된 싱글 게임을 원상복구 (거절/취소/연결끊김 시 호출)
+function resumeIfInvitePaused(userCode) {
+  const g = singleGames.get(userCode);
+  if (!g || !g.paused || g.pausedReason !== 'invite') return;
+  g.paused = false;
+  g.pausedReason = null;
+  const remaining = g.timerRemainingMs ?? 45000;
+  g.timerRemainingMs = null;
+  broadcastGame(g);
+  const cur = getCurrentPlayer(g);
+  startTimer(g, remaining);
+  if (cur?.isAI) setTimeout(() => runAITurn(g, cur), 2000 + Math.random() * 1000);
 }
 
 // ── 멀티모드 "한 판 더" 준비 단계 ────────────────────────────────────────
@@ -539,12 +573,13 @@ io.on('connection', (socket) => {
       }
     }
 
-    sessions.set(socket.id, { userCode: user.userCode, userName: user.userName });
+    sessions.set(socket.id, { userCode: user.userCode, userName: user.userName, showOnline: user.showOnline !== 0 });
     socket.emit('loginSuccess', {
       userCode: user.userCode, userName: user.userName,
       isAdmin: user.isAdmin === 1,
       singlePoints: user.singlePoints, multiBalance: user.multiBalance,
-      winMessage: user.winMessage, avatar: user.avatar || 'person'
+      winMessage: user.winMessage, avatar: user.avatar || 'person',
+      showOnline: user.showOnline !== 0
     });
     // 멀티 게임 재연결: 싱글보다 멀티 우선
     if (activeGame && activeGame.status === 'playing') {
@@ -625,6 +660,139 @@ io.on('connection', (socket) => {
     if (!sess) return;
     await db.updateUser(sess.userCode, { avatar });
     socket.emit('avatarSaved', { avatar });
+  });
+
+  socket.on('setShowOnline', async ({ show }) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    sess.showOnline = !!show;
+    await db.updateUser(sess.userCode, { showOnline: show ? 1 : 0 });
+    socket.emit('showOnlineSaved', { show: !!show });
+    broadcastPresence();
+  });
+
+  socket.on('presenceVisible', () => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    presenceVisible.add(sess.userCode);
+    broadcastPresence();
+  });
+
+  socket.on('presenceHidden', () => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    presenceVisible.delete(sess.userCode);
+    broadcastPresence();
+  });
+
+  // ── 멀티 초대 (관리자 전용) ──────────────────────────────────────────────
+  socket.on('sendInvite', async ({ targetUserCode }) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    const me = await db.getUser(sess.userCode);
+    if (!me?.isAdmin) return;
+    if (targetUserCode === sess.userCode) return;
+    if (pendingInvites.has(sess.userCode)) {
+      socket.emit('inviteError', '이미 대기 중인 초대가 있어요'); return;
+    }
+    if ([...pendingInvites.values()].some(v => v.toCode === targetUserCode)) {
+      socket.emit('inviteError', '이미 다른 초대가 진행 중이에요'); return;
+    }
+    const targetSid = getSocketId(targetUserCode);
+    const online = new Set(visibleOnlineCodes());
+    if (!targetSid || !online.has(targetUserCode)) {
+      socket.emit('inviteError', '상대방이 접속중이 아니에요'); return;
+    }
+    if (activeGame?.players.some(p => p.userCode === targetUserCode && !p.isAI)) {
+      socket.emit('inviteError', '상대방이 멀티 게임 중이에요'); return;
+    }
+    const targetUser = await db.getUser(targetUserCode);
+    if (!targetUser) return;
+
+    const targetSingle = singleGames.get(targetUserCode);
+    const wasPlayingSingle = !!(targetSingle && targetSingle.status === 'playing' && !targetSingle.paused);
+    if (wasPlayingSingle) {
+      targetSingle.paused = true;
+      targetSingle.pausedReason = 'invite';
+      targetSingle.timerRemainingMs = targetSingle.timerStart ? Math.max(0, 45000 - (Date.now() - targetSingle.timerStart)) : 45000;
+      clearTimer(targetSingle);
+      clearThankYouTimeout(targetSingle);
+      broadcastGame(targetSingle);
+    }
+
+    pendingInvites.set(sess.userCode, { toCode: targetUserCode, wasPlayingSingle });
+    emitToPlayer(targetUserCode, 'inviteReceived', {
+      fromCode: sess.userCode, fromName: sess.userName, fromAvatar: me.avatar || 'person'
+    });
+    socket.emit('inviteSent', { toCode: targetUserCode, toName: targetUser.userName, toAvatar: targetUser.avatar || 'person' });
+  });
+
+  socket.on('cancelInvite', () => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    const inv = pendingInvites.get(sess.userCode);
+    if (!inv) return;
+    pendingInvites.delete(sess.userCode);
+    resumeIfInvitePaused(inv.toCode);
+    emitToPlayer(inv.toCode, 'inviteCancelled', {});
+  });
+
+  socket.on('respondInvite', async ({ accept }) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    const entry = [...pendingInvites].find(([, v]) => v.toCode === sess.userCode);
+    if (!entry) return;
+    const [fromCode, inv] = entry;
+    pendingInvites.delete(fromCode);
+
+    if (!accept) {
+      resumeIfInvitePaused(sess.userCode);
+      emitToPlayer(fromCode, 'inviteDeclined', { byName: sess.userName });
+      return;
+    }
+
+    // 양쪽의 진행 중이던 싱글 게임 정리
+    for (const code of [fromCode, sess.userCode]) {
+      const g = singleGames.get(code);
+      if (g) {
+        clearTimer(g);
+        clearThankYouTimeout(g);
+        g.status = 'ended';
+        singleGames.delete(code);
+      }
+    }
+
+    if (waitingRoom.size + 2 > 4) {
+      emitToPlayer(fromCode, 'inviteError', '대기실이 꽉 찼습니다');
+      emitToPlayer(sess.userCode, 'inviteError', '대기실이 꽉 찼습니다');
+      return;
+    }
+
+    const expiresAt = Date.now() + 20000;
+    inviteApprovedWaiting.set(fromCode, expiresAt);
+    inviteApprovedWaiting.set(sess.userCode, expiresAt);
+
+    emitToPlayer(fromCode, 'inviteResponded', { accepted: true, byName: sess.userName });
+    emitToPlayer(fromCode, 'inviteAccepted', {});
+    emitToPlayer(sess.userCode, 'inviteAccepted', {});
+  });
+
+  // 초대 수락 후 대기실 자동 입장 (페이지 이동으로 소켓이 재연결된 경우 포함, 입장코드 불필요)
+  socket.on('joinWaitingViaInvite', async () => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    const expiry = inviteApprovedWaiting.get(sess.userCode);
+    if (!expiry || expiry < Date.now()) {
+      socket.emit('joinMultiError', '초대가 만료됐어요.'); return;
+    }
+    inviteApprovedWaiting.delete(sess.userCode);
+    const user = await db.getUser(sess.userCode);
+    if (!user) return;
+    if (waitingRoom.size >= 4) { socket.emit('joinMultiError', '대기실이 꽉 찼습니다 (최대 4명).'); return; }
+    waitingRoom.set(sess.userCode, socket.id);
+    socket.join('waiting');
+    await broadcastWaiting();
+    socket.emit('joinMultiOk');
   });
 
   socket.on('charge', async ({ mode }) => {
@@ -1054,9 +1222,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('getRanking', async () => {
+    const online = new Set(visibleOnlineCodes());
+    const mark = rows => rows.map(r => ({ ...r, online: online.has(r.userCode) }));
     socket.emit('ranking', {
-      multi: await db.getMultiRanking(),
-      single: await db.getSingleRanking()
+      multi: mark(await db.getMultiRanking()),
+      single: mark(await db.getSingleRanking())
     });
   });
 
@@ -1072,6 +1242,21 @@ io.on('connection', (socket) => {
     const sess = sessions.get(socket.id);
     if (sess) {
       waitingRoom.delete(sess.userCode);
+      presenceVisible.delete(sess.userCode);
+      broadcastPresence();
+      // 대기 중이던 초대 정리: 내가 보낸 초대는 취소, 나한테 온 초대는 상대에게 취소 알림
+      const sentInvite = pendingInvites.get(sess.userCode);
+      if (sentInvite) {
+        pendingInvites.delete(sess.userCode);
+        resumeIfInvitePaused(sentInvite.toCode);
+        emitToPlayer(sentInvite.toCode, 'inviteCancelled', {});
+      }
+      for (const [fromCode, inv] of pendingInvites) {
+        if (inv.toCode === sess.userCode) {
+          pendingInvites.delete(fromCode);
+          emitToPlayer(fromCode, 'inviteCancelled', {});
+        }
+      }
       // 싱글모드: 뒤로가기/탭닫기/네트워크끊김 등으로 연결이 끊기면 카드가 계속
       // 강제로 버려지지 않게 자동 일시정지. 재접속하면 paused 상태 그대로 복원되어
       // 일시정지 화면이 뜨고, 재개 버튼으로 이어할 수 있음.

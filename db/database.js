@@ -23,9 +23,13 @@ async function init() {
       singleGames INTEGER DEFAULT 0,
       multiWins INTEGER DEFAULT 0,
       multiGames INTEGER DEFAULT 0,
+      showOnline INTEGER DEFAULT 1,
       createdAt INTEGER DEFAULT (strftime('%s','now'))
     )
   `);
+  try {
+    await db.query(sql`ALTER TABLE users ADD COLUMN showOnline INTEGER DEFAULT 1`);
+  } catch (e) { /* 이미 컬럼이 있으면 무시 (기존 DB 마이그레이션) */ }
 
   await db.query(sql`
     CREATE TABLE IF NOT EXISTS game_results (

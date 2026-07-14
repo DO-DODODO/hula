@@ -279,7 +279,7 @@ function renderPlayer(pos, player, comboGrew = false, growComboEl = null) {
     const toEl = comboGrew
       ? (growComboEl || document.getElementById('combos-area'))
       : document.getElementById('discard-card');
-    flyCard(el, toEl, false, null, comboGrew ? 380 : 550);
+    flyCard(el, toEl, false, null, 550);
   }
   prevHandCounts.set(player.userCode, player.handCount);
 

@@ -36,6 +36,10 @@ socket.on('loginSuccess', (user) => {
   setCookie('isAdmin', user.isAdmin ? '1' : '0');
   updateMainScreen();
   showScreen('screen-main');
+  if (sessionStorage.getItem('autoJoinWaiting') === '1') {
+    sessionStorage.removeItem('autoJoinWaiting');
+    socket.emit('joinWaitingViaInvite');
+  }
 });
 socket.on('loginError', (msg) => {
   showScreen('screen-login');
@@ -173,6 +177,7 @@ document.getElementById('btn-settings').onclick = () => {
   document.getElementById('input-win-message').value = me.winMessage || '';
   document.getElementById('single-points-display').textContent = `${me.singlePoints?.toLocaleString()}점`;
   document.getElementById('multi-balance-display').textContent = `₩${me.multiBalance?.toLocaleString()}`;
+  document.getElementById('input-show-online').checked = me.showOnline !== false;
   renderAvatarGrid(me.avatar || 'person');
   if (isAdmin) {
     document.getElementById('admin-settings').style.display = '';
@@ -194,6 +199,13 @@ socket.on('winMessageSaved', () => {
 
 socket.on('avatarSaved', ({ avatar }) => {
   me.avatar = avatar;
+});
+
+document.getElementById('input-show-online').onchange = (e) => {
+  socket.emit('setShowOnline', { show: e.target.checked });
+};
+socket.on('showOnlineSaved', ({ show }) => {
+  me.showOnline = show;
 });
 
 document.getElementById('btn-charge-single').onclick = () => socket.emit('charge', { mode: 'single' });
@@ -301,6 +313,20 @@ socket.on('ranking', (data) => {
   rankingData = data;
   renderRanking('single');
 });
+socket.on('presenceList', ({ online }) => {
+  if (!rankingData) return;
+  const set = new Set(online);
+  for (const mode of ['single', 'multi']) {
+    for (const r of rankingData[mode] || []) r.online = set.has(r.userCode);
+  }
+  const activeMode = document.getElementById('tab-single').classList.contains('active') ? 'single' : 'multi';
+  renderRanking(activeMode);
+});
+function tryInvite(userCode, userName) {
+  if (window.presencePending) { alert('이미 대기 중인 초대가 있어요'); return; }
+  if (!confirm(`${userName}님을 멀티모드에 초대하시겠습니까?`)) return;
+  socket.emit('sendInvite', { targetUserCode: userCode });
+}
 function winRate(wins, games) {
   if (!games) return '-';
   return Math.round((wins / games) * 100).toLocaleString() + '%';
@@ -324,11 +350,13 @@ function renderRanking(mode) {
       const losses = (games ?? 0) - (wins ?? 0);
       const avatarEmoji = (AVATARS.find(a => a.key === r.avatar) || AVATARS[0]).emoji;
       const rankBadge = i === 0 ? (mode === 'multi' ? '💎' : '👑') : '';
-      return `<tr>
+      const canInvite = isAdmin && r.online && me && r.userCode !== me.userCode;
+      return `<tr${canInvite ? ` class="presence-clickable" data-usercode="${r.userCode}" data-username="${r.userName}"` : ''}>
         <td>${i + 1}</td>
         <td>
           <div class="rank-name-cell">
             <span class="badge-icon">${rankBadge}</span>
+            <span class="presence-dot${r.online ? ' on' : ''}"></span>
             <span>${avatarEmoji} ${r.userName}</span>
           </div>
         </td>
@@ -338,6 +366,9 @@ function renderRanking(mode) {
       </tr>`;
     }).join('')}</tbody>
   </table>`;
+  list.querySelectorAll('tr[data-usercode]').forEach(tr => {
+    tr.onclick = () => tryInvite(tr.dataset.usercode, tr.dataset.username);
+  });
 }
 
 // ── Help ───────────────────────────────────────────────────────────────
