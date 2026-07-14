@@ -181,7 +181,11 @@ function decideDiscard(hand, existingCombos = [], discardPile = []) {
   const candidates = pool0.filter(c => !protectedIds.has(c.id));
   const pool = candidates.length > 0 ? candidates : pool0;
 
-  return pool.reduce((max, c) => c.value > max.value ? c : max, pool[0]);
+  // 남이 붙이기 할 수 있는(테이블 조합에 붙는) 카드는 최대한 피해서 버림
+  const safe = pool.filter(c => !existingCombos.some(combo => canAttach(combo, c)));
+  const finalPool = safe.length > 0 ? safe : pool;
+
+  return finalPool.reduce((max, c) => c.value > max.value ? c : max, finalPool[0]);
 }
 
 module.exports = { decideDraw, decideThankYou, decideActions, decideAttach, decideDiscard, findCombos, isCardUseful };

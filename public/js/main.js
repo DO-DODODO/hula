@@ -403,7 +403,7 @@ function renderRanking(mode) {
     const rowClasses = ['prow', isRank1 && 'rank1', isMe && 'me', canInvite && 'presence-clickable'].filter(Boolean).join(' ');
     const rankLabel = isRank1 ? (mode === 'multi' ? '💎' : '👑') : String(i + 1);
     const amount = mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : (r.singlePoints ?? 0).toLocaleString() + '점';
-    const pname = r.isHulaKing ? `<span class="pname name-gold">${r.userName}</span>` : `<span class="pname">${r.userName}</span>`;
+    const pname = `<span class="pname">${r.userName}</span>`;
     return `<div class="${rowClasses}"${canInvite ? ` data-usercode="${r.userCode}" data-username="${r.userName}"` : ''}>
       <div class="prank">${rankLabel}</div>
       <div class="pav-wrap">
