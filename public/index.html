@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라</title>
-  <link rel="stylesheet" href="css/style.css?v=11">
+  <link rel="stylesheet" href="css/style.css?v=12">
 </head>
 <body>
   <div id="network-banner">🔌 연결이 끊겼습니다. 재연결 중...</div>
@@ -12,7 +12,11 @@
   <!-- Login Screen -->
   <div id="screen-login" class="screen">
     <div class="login-box">
-      <h1 class="logo">훌라</h1>
+      <div class="hula-stamp login-hula" id="login-hula-logo">
+        <span class="hula-rays"></span>
+        <span class="hula-burst"></span>
+        <span class="hula-text">훌라</span>
+      </div>
       <input type="text" id="input-usercode" placeholder="코드를 입력하세요" maxlength="20">
       <button id="btn-login" class="btn-primary">입장</button>
       <div id="login-error" class="error-msg"></div>
@@ -21,21 +25,38 @@
 
   <!-- Main Screen -->
   <div id="screen-main" class="screen">
-    <div class="main-header">
-      <span id="main-username" class="username"></span>
-    </div>
-    <div class="main-buttons">
-      <button id="btn-single" class="btn-mode">
-        <span class="mode-label">싱글</span>
-        <span id="single-balance" class="mode-balance"></span>
-      </button>
-      <button id="btn-multi" class="btn-mode">
-        <span class="mode-label">멀티</span>
-        <span id="multi-balance" class="mode-balance"></span>
-      </button>
-      <button id="btn-ranking" class="btn-sub">랭킹</button>
-      <button id="btn-settings" class="btn-sub">설정</button>
-      <button id="btn-help" class="btn-sub">도움말</button>
+    <div class="main-wrap">
+      <div class="profile-chip">
+        <span id="main-avatar" class="profile-chip-av"></span>
+        <span id="main-username" class="profile-chip-nm"></span>
+      </div>
+
+      <div class="hula-stamp small-logo"><span class="hula-text">훌라</span></div>
+
+      <div class="mode-cards">
+        <button id="btn-single" class="mode-card single">
+          <span class="mode-card-icon">🏆</span>
+          <span class="mode-card-body">
+            <span class="mode-card-title">싱글모드</span>
+            <span id="single-balance" class="mode-card-sub"></span>
+          </span>
+          <span class="mode-card-go">›</span>
+        </button>
+        <button id="btn-multi" class="mode-card multi">
+          <span class="mode-card-icon">💎</span>
+          <span class="mode-card-body">
+            <span class="mode-card-title">멀티모드</span>
+            <span id="multi-balance" class="mode-card-sub"></span>
+          </span>
+          <span class="mode-card-go">›</span>
+        </button>
+      </div>
+
+      <div class="sub-menu">
+        <button id="btn-ranking" class="sub-item"><span class="sub-item-ic">🏅</span><span class="sub-item-lb">랭킹</span></button>
+        <button id="btn-settings" class="sub-item"><span class="sub-item-ic">⚙️</span><span class="sub-item-lb">설정</span></button>
+        <button id="btn-help" class="sub-item"><span class="sub-item-ic">❓</span><span class="sub-item-lb">도움말</span></button>
+      </div>
     </div>
   </div>
 
@@ -65,58 +86,71 @@
 
   <!-- Settings Screen -->
   <div id="screen-settings" class="screen">
-    <div class="settings-box">
-      <h2>설정</h2>
-
-      <div class="settings-section-head">프로필</div>
-      <div class="setting-row">
-        <label>승리 문구</label>
-        <input type="text" id="input-win-message" maxlength="20" placeholder="최대 20자">
-      </div>
-      <div class="setting-row">
-        <label>내 캐릭터</label>
-        <div id="avatar-grid" class="avatar-grid"></div>
-      </div>
-      <div class="setting-row">
-        <label>접속중 표시</label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="input-show-online">
-          <span class="toggle-track"><span class="toggle-knob"></span></span>
-        </label>
-        <span style="color:var(--text-dim);font-size:12px">끄면 다른 사람 접속 상태도 안 보여요</span>
-      </div>
-      <button id="btn-save-message" class="btn-primary" style="width:100%">저장</button>
-
-      <hr>
-      <div class="settings-section-head">재화</div>
-      <div class="setting-row">
-        <label>싱글 포인트</label>
-        <span id="single-points-display"></span>
-        <button id="btn-charge-single" class="btn-secondary">충전</button>
-      </div>
-      <div class="setting-row">
-        <label>멀티 잔액</label>
-        <span id="multi-balance-display"></span>
-        <button id="btn-charge-multi" class="btn-secondary">충전</button>
+    <div class="settings-box-v2">
+      <div class="v2-topbar">
+        <button id="btn-back-settings" class="back-circle" aria-label="뒤로">←</button>
+        <h2>설정</h2>
       </div>
 
-      <div id="admin-settings" style="display:none">
-        <hr>
-        <h3>관리자 메뉴</h3>
-        <div class="setting-row">
-          <label>입장 코드</label>
-          <input type="text" id="input-entry-code" maxlength="20">
-          <button id="btn-save-entry-code" class="btn-primary">변경</button>
+      <div class="v2-content">
+        <div class="v2-card">
+          <div class="profile-head">
+            <div id="settings-avatar-big" class="avatar-big"></div>
+            <div class="who">
+              <div id="settings-profile-name" class="name"></div>
+              <div class="role">승리 문구 · 캐릭터</div>
+            </div>
+          </div>
+
+          <label class="field-label">승리 문구</label>
+          <input type="text" id="input-win-message" class="txt-input" maxlength="20" placeholder="최대 20자">
+
+          <div id="avatar-grid" class="avatar-scroll"></div>
+
+          <div class="divider-soft"></div>
+
+          <div class="toggle-row">
+            <div>
+              <div class="t-label">접속중 표시</div>
+              <div class="t-sub">끄면 다른 사람 접속 상태도 안 보여요</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="input-show-online">
+              <span class="toggle-track"><span class="toggle-knob"></span></span>
+            </label>
+          </div>
+
+          <button id="btn-save-message" class="btn-save">저장</button>
         </div>
-        <div class="setting-row">
-          <button id="btn-manage-users" class="btn-secondary">유저 관리</button>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="icon">🏆</div>
+            <div class="label">싱글 포인트</div>
+            <div id="single-points-display" class="value"></div>
+            <button id="btn-charge-single" class="btn-charge">충전</button>
+          </div>
+          <div class="stat-card">
+            <div class="icon">💎</div>
+            <div class="label">멀티 잔액</div>
+            <div id="multi-balance-display" class="value"></div>
+            <button id="btn-charge-multi" class="btn-charge">충전</button>
+          </div>
         </div>
+
+        <div id="admin-settings" class="v2-card admin" style="display:none">
+          <div class="admin-head">⚙ 관리자 메뉴</div>
+          <label class="field-label">입장 코드</label>
+          <input type="text" id="input-entry-code" class="txt-input" maxlength="20">
+          <button id="btn-save-entry-code" class="btn-save" style="margin-top:10px">변경</button>
+          <button id="btn-manage-users" class="btn-outline">유저 관리</button>
+        </div>
+        <div id="admin-login-area">
+          <button id="btn-admin-mode" class="btn-outline">관리자 모드</button>
+        </div>
+
+        <div id="settings-msg" class="error-msg"></div>
       </div>
-      <div id="admin-login-area">
-        <button id="btn-admin-mode" class="btn-secondary">관리자 모드</button>
-      </div>
-      <button id="btn-back-settings" class="btn-secondary">뒤로</button>
-      <div id="settings-msg" class="error-msg"></div>
     </div>
   </div>
 
@@ -148,49 +182,76 @@
 
   <!-- Ranking Screen -->
   <div id="screen-ranking" class="screen">
-    <div class="ranking-box">
-      <h2>랭킹</h2>
-      <div class="ranking-tabs">
-        <button id="tab-single" class="tab-btn active">싱글</button>
-        <button id="tab-multi" class="tab-btn">멀티</button>
+    <div class="settings-box-v2">
+      <div class="v2-topbar">
+        <button id="btn-back-ranking" class="back-circle" aria-label="뒤로">←</button>
+        <h2>랭킹</h2>
       </div>
-      <div id="ranking-list" class="ranking-list"></div>
-      <button id="btn-back-ranking" class="btn-secondary">뒤로</button>
+      <div class="v2-tabs">
+        <button id="tab-single" class="v2-tab active">싱글</button>
+        <button id="tab-multi" class="v2-tab">멀티</button>
+      </div>
+      <div id="ranking-list" class="v2-ranking-list"></div>
     </div>
   </div>
 
   <!-- Help Screen -->
   <div id="screen-help" class="screen">
-    <div class="help-box">
-      <h2>도움말</h2>
-      <div class="help-content">
-        <h3>기본 규칙</h3>
-        <p>52장 덱, 7장씩 배분. 패가 0장이 되면 승리!</p>
-        <h3>턴 진행</h3>
-        <p>1. <b>드로우</b>: 카드 더미 또는 버린 더미에서 1장</p>
-        <p>2. <b>등록/붙이기</b>: 유효한 조합 등록, 이후 붙이기 가능</p>
-        <p>3. <b>버리기</b>: 1장 버림 → 턴 종료</p>
-        <h3>등록 조합</h3>
-        <p>• 같은 숫자 3장 이상</p>
-        <p>• 같은 무늬 연속 숫자 3장 이상 (순환 허용)</p>
-        <p>• 7은 1장 단독 등록 가능</p>
-        <h3>훌라</h3>
-        <p>한 번도 등록 안 하다가, 이번 턴에 등록(+붙이기/버리기)으로 손패를 한 번에 비우고 승리하면 훌라!</p>
-        <p>훌라 시 패자 벌금이 평소보다 2배 더 늘어남(미등록 4배, 등록 2배)</p>
-        <h3>땡큐</h3>
-        <p>카드가 버려지면 땡큐 버튼 활성화. 먼저 누른 1명만 획득!</p>
-        <p>취소 시 벌금: (다른 플레이어 수 × 100원)</p>
-        <h3>정산</h3>
-        <p>승자: 패자 카드합 × 100원 수취</p>
-        <p>패자: 카드합 × 100원 지불 (미등록 시 2배)</p>
-        <p>공동 1등이면 패자는 승자 각각에게 벌금을 지불(승자 수만큼 곱해서 지불)</p>
+    <div class="settings-box-v2">
+      <div class="v2-topbar">
+        <button id="btn-back-help" class="back-circle" aria-label="뒤로">←</button>
+        <h2>도움말</h2>
       </div>
-      <button id="btn-back-help" class="btn-secondary">뒤로</button>
+
+      <div class="v2-content">
+        <div class="v2-card">
+          <div class="card-head"><span class="ic">📋</span><span class="tt">기본 규칙</span></div>
+          <p>52장 덱, 플레이어당 7장씩 배분. <b>손패를 가장 먼저 비우면 승리</b>해요.</p>
+        </div>
+
+        <div class="v2-card">
+          <div class="card-head"><span class="ic">🔄</span><span class="tt">턴 순서</span></div>
+          <ol>
+            <li><b>드로우</b> — 카드 더미 또는 버린 더미에서 1장</li>
+            <li><b>등록 / 붙이기</b> — 조합을 새로 등록하거나 기존 조합에 붙이기 (선택)</li>
+            <li><b>버리기</b> — 카드 1장 버리고 턴 종료</li>
+          </ol>
+        </div>
+
+        <div class="v2-card">
+          <div class="card-head"><span class="ic">🃏</span><span class="tt">등록 가능한 조합</span></div>
+          <ul>
+            <li>같은 숫자 3장 이상</li>
+            <li>같은 무늬의 연속 숫자 3장 이상 (Q-K-A처럼 순환 가능)</li>
+            <li>7은 혼자서도 등록 가능</li>
+          </ul>
+        </div>
+
+        <div class="v2-card hula">
+          <div class="card-head"><span class="ic">🎉</span><span class="tt">훌라 (특별 승리)</span></div>
+          <p>게임 내내 한 번도 등록하지 않다가, <b>이번 턴 등록으로 손패를 한 번에 비우면 훌라!</b></p>
+          <p class="muted-line">패자 벌금이 평소의 2배 (한 번도 등록 못 했던 패자는 4배)</p>
+        </div>
+
+        <div class="v2-card">
+          <div class="card-head"><span class="ic">🙏</span><span class="tt">땡큐</span></div>
+          <p>누가 카드를 버리면 잠깐 <b>땡큐 버튼</b>이 켜져요 — 가장 먼저 누른 사람이 그 카드를 가져가요.</p>
+          <p class="muted-line">가져간 카드를 못 쓰고 취소하면 벌금 (다른 플레이어 수 × 100원)</p>
+        </div>
+
+        <div class="v2-card settle">
+          <div class="card-head"><span class="ic">💰</span><span class="tt">정산</span></div>
+          <div class="value-row"><span>승자</span><b>패자 카드합 × 100원 수취</b></div>
+          <div class="value-row"><span>패자</span><b>카드합 × 100원 지불</b></div>
+          <div class="value-row"><span>패자 (미등록 상태)</span><b>2배 지불</b></div>
+          <p class="muted-line">공동 1등이면, 패자는 <b>승자 한 명당</b> 벌금을 각각 지불해요 (승자가 2명이면 벌금도 2배)</p>
+        </div>
+      </div>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/main.js?v=1"></script>
+  <script src="js/main.js?v=2"></script>
   <script src="js/presence.js?v=1"></script>
 </body>
 </html>

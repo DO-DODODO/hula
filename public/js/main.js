@@ -20,6 +20,8 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
+document.getElementById('login-hula-logo')?.classList.add('play');
+
 // ── Login ──────────────────────────────────────────────────────────────
 document.getElementById('btn-login').onclick = () => {
   const code = document.getElementById('input-usercode').value.trim();
@@ -73,8 +75,10 @@ socket.on('disconnect', () => {
 
 function updateMainScreen() {
   document.getElementById('main-username').textContent = me.userName;
-  document.getElementById('single-balance').textContent = `${me.singlePoints?.toLocaleString()}점`;
-  document.getElementById('multi-balance').textContent = `₩${me.multiBalance?.toLocaleString()}`;
+  document.getElementById('single-balance').textContent = `${me.singlePoints?.toLocaleString()}점 보유`;
+  document.getElementById('multi-balance').textContent = `₩${me.multiBalance?.toLocaleString()} 보유`;
+  const avatarEl = document.getElementById('main-avatar');
+  if (avatarEl) avatarEl.textContent = (AVATARS.find(a => a.key === me.avatar) || AVATARS[0]).emoji;
 }
 
 // ── Single Mode ────────────────────────────────────────────────────────
@@ -178,6 +182,8 @@ document.getElementById('btn-settings').onclick = () => {
   document.getElementById('single-points-display').textContent = `${me.singlePoints?.toLocaleString()}점`;
   document.getElementById('multi-balance-display').textContent = `₩${me.multiBalance?.toLocaleString()}`;
   document.getElementById('input-show-online').checked = me.showOnline !== false;
+  document.getElementById('settings-avatar-big').textContent = (AVATARS.find(a => a.key === me.avatar) || AVATARS[0]).emoji;
+  document.getElementById('settings-profile-name').textContent = me.userName;
   renderAvatarGrid(me.avatar || 'person');
   if (isAdmin) {
     document.getElementById('admin-settings').style.display = '';
@@ -211,6 +217,11 @@ socket.on('winMessageSaved', () => {
 
 socket.on('avatarSaved', ({ avatar }) => {
   me.avatar = avatar;
+  const emoji = (AVATARS.find(a => a.key === avatar) || AVATARS[0]).emoji;
+  const mainAvatarEl = document.getElementById('main-avatar');
+  if (mainAvatarEl) mainAvatarEl.textContent = emoji;
+  const bigAvatarEl = document.getElementById('settings-avatar-big');
+  if (bigAvatarEl) bigAvatarEl.textContent = emoji;
 });
 
 document.getElementById('input-show-online').onchange = (e) => {
@@ -349,37 +360,32 @@ function renderRanking(mode) {
   const rows = rankingData[mode] || [];
   const list = document.getElementById('ranking-list');
   if (rows.length === 0) { list.innerHTML = '<p style="color:#aaa;text-align:center;padding:16px">데이터 없음</p>'; return; }
-  list.innerHTML = `<table>
-    <thead><tr>
-      <th>순위</th><th>이름</th>
-      <th>${mode === 'multi' ? '보유금액' : '포인트'}</th>
-      <th>전적</th>
-      <th>승률</th>
-    </tr></thead>
-    <tbody>${rows.map((r, i) => {
-      const wins = mode === 'multi' ? r.multiWins : r.singleWins;
-      const games = mode === 'multi' ? r.multiGames : r.singleGames;
-      const losses = (games ?? 0) - (wins ?? 0);
-      const avatarEmoji = (AVATARS.find(a => a.key === r.avatar) || AVATARS[0]).emoji;
-      const rankBadge = i === 0 ? (mode === 'multi' ? '💎' : '👑') : '';
-      const canInvite = isAdmin && r.online && me && r.userCode !== me.userCode;
-      return `<tr${canInvite ? ` class="presence-clickable" data-usercode="${r.userCode}" data-username="${r.userName}"` : ''}>
-        <td>${i + 1}</td>
-        <td>
-          <div class="rank-name-cell">
-            <span class="badge-icon">${rankBadge}</span>
-            <span class="presence-dot${r.online ? ' on' : ''}"></span>
-            <span>${avatarEmoji} ${r.userName}</span>
-          </div>
-        </td>
-        <td>${mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : (r.singlePoints ?? 0).toLocaleString() + '점'}</td>
-        <td>${(wins ?? 0).toLocaleString()}승 ${losses.toLocaleString()}패</td>
-        <td>${winRate(wins ?? 0, games ?? 0)}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
-  list.querySelectorAll('tr[data-usercode]').forEach(tr => {
-    tr.onclick = () => tryInvite(tr.dataset.usercode, tr.dataset.username);
+  list.innerHTML = rows.map((r, i) => {
+    const wins = mode === 'multi' ? r.multiWins : r.singleWins;
+    const games = mode === 'multi' ? r.multiGames : r.singleGames;
+    const losses = (games ?? 0) - (wins ?? 0);
+    const avatarEmoji = (AVATARS.find(a => a.key === r.avatar) || AVATARS[0]).emoji;
+    const isRank1 = i === 0;
+    const isMe = me && r.userCode === me.userCode;
+    const canInvite = isAdmin && r.online && me && r.userCode !== me.userCode;
+    const rowClasses = ['prow', isRank1 && 'rank1', isMe && 'me', canInvite && 'presence-clickable'].filter(Boolean).join(' ');
+    const rankLabel = isRank1 ? (mode === 'multi' ? '💎' : '👑') : String(i + 1);
+    const amount = mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : (r.singlePoints ?? 0).toLocaleString() + '점';
+    return `<div class="${rowClasses}"${canInvite ? ` data-usercode="${r.userCode}" data-username="${r.userName}"` : ''}>
+      <div class="prank">${rankLabel}</div>
+      <div class="pav-wrap">
+        <div class="pav">${avatarEmoji}</div>
+        <div class="presence-dot${r.online ? ' on' : ''}"></div>
+      </div>
+      <div class="pbody">
+        <div class="pname-row"><span class="pname">${r.userName}</span>${isMe ? '<span class="pme-tag">나</span>' : ''}</div>
+        <div class="pstat-row"><span>${(wins ?? 0).toLocaleString()}승 ${losses.toLocaleString()}패</span></div>
+      </div>
+      <div class="pvalue"><div class="amt">${amount}</div><div class="rate">${winRate(wins ?? 0, games ?? 0)}</div></div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-usercode]').forEach(row => {
+    row.onclick = () => tryInvite(row.dataset.usercode, row.dataset.username);
   });
 }
 

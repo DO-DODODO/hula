@@ -45,12 +45,38 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--gree
 .login-box { background: rgba(0,0,0,0.6); border-radius: 12px; padding: 40px 32px; display: flex; flex-direction: column; gap: 16px; min-width: 280px; align-items: center; }
 .logo { font-size: 48px; color: var(--gold); letter-spacing: 4px; }
 
-/* ── Main ────────────────────────────────────────────────────────────── */
-.main-header { position: absolute; top: 12px; right: 16px; color: var(--text-light); font-size: 14px; }
-.main-buttons { display: flex; flex-direction: column; gap: 12px; align-items: center; }
-.btn-mode { width: 200px; padding: 18px; font-size: 20px; border-radius: 10px; background: var(--gold); color: #111; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font-weight: bold; }
-.mode-balance { font-size: 13px; color: #444; }
-.btn-sub { width: 200px; padding: 12px; font-size: 16px; border-radius: 8px; background: rgba(255,255,255,0.15); color: var(--text-light); border: 1px solid rgba(255,255,255,0.3); cursor: pointer; }
+/* 로그인/메인 로고: 훌라(원턴승리) 연출과 같은 hula-stamp/rays/burst/text를 재사용.
+   #overlay-hula.play 트리거와는 별개로 .hula-stamp.play 트리거를 새로 둬서
+   승리 연출 쪽 애니메이션 정의는 그대로 공유한다. */
+.hula-stamp.login-hula { width: 220px; height: 130px; margin: 0 auto; display: flex; align-items: center; justify-content: center; }
+.hula-stamp.play .hula-rays { animation: hulaRaysOut 1s ease-out 0.2s forwards; }
+.hula-stamp.play .hula-burst { animation: hulaBurstOut 0.7s ease-out 0.2s forwards; }
+.hula-stamp.play .hula-text { animation: hulaTextPop 0.6s cubic-bezier(.28,1.55,.4,1) 0.24s forwards; }
+.hula-stamp.small-logo { width: 100%; text-align: center; margin: 6px 0 22px; }
+.hula-stamp.small-logo .hula-text { font-size: 30px; opacity: 1; transform: scale(1) rotate(-3deg); }
+
+/* ── Main v2 ─────────────────────────────────────────────────────────── */
+.main-wrap { width: 100%; max-width: 340px; padding: 24px 20px; display: flex; flex-direction: column; }
+.profile-chip { align-self: flex-end; display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 6px 12px 6px 6px; margin-bottom: 4px; }
+.profile-chip-av { width: 24px; height: 24px; border-radius: 50%; background: rgba(201,168,76,0.3); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.profile-chip-nm { font-size: 12px; font-weight: 600; color: var(--text-light); }
+
+.mode-cards { display: flex; flex-direction: column; gap: 12px; }
+.mode-card { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); cursor: pointer; text-align: left; width: 100%; }
+.mode-card.single { background: linear-gradient(120deg, rgba(201,168,76,0.22), rgba(201,168,76,0.05)); border-color: rgba(201,168,76,0.35); }
+.mode-card.multi { background: linear-gradient(120deg, rgba(120,170,220,0.18), rgba(120,170,220,0.04)); border-color: rgba(120,170,220,0.3); }
+.mode-card-icon { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.mode-card.single .mode-card-icon { background: linear-gradient(160deg, var(--gold), #a9823a); }
+.mode-card.multi .mode-card-icon { background: linear-gradient(160deg, #8fb8e0, #4a7fb0); }
+.mode-card-body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.mode-card-title { font-size: 16px; font-weight: 800; color: var(--text-light); }
+.mode-card-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.mode-card-go { font-size: 16px; color: var(--text-dim); flex-shrink: 0; }
+
+.sub-menu { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+.sub-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 6px; border-radius: 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
+.sub-item-ic { font-size: 19px; }
+.sub-item-lb { font-size: 11.5px; color: var(--text-light); }
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 .btn-primary { padding: 12px 24px; background: var(--gold); color: #111; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
@@ -77,27 +103,98 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .setting-row label { color: var(--text-dim); min-width: 80px; }
 .settings-section-head { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); margin-top: -4px; }
 
-.toggle-switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; cursor: pointer; }
+.toggle-switch { position: relative; display: inline-block; width: 42px; min-width: 42px; height: 24px; flex-shrink: 0; cursor: pointer; }
 .toggle-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .toggle-track { position: absolute; inset: 0; border-radius: 12px; background: rgba(255,255,255,0.2); transition: background 0.15s ease; }
 .toggle-knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left 0.15s ease; }
 .toggle-switch input:checked + .toggle-track { background: var(--gold); }
 .toggle-switch input:checked + .toggle-track .toggle-knob { left: 21px; background: #1e1e1e; }
 
-/* Ranking */
-.ranking-tabs { display: flex; gap: 8px; }
-.tab-btn { padding: 8px 20px; border-radius: 6px 6px 0 0; border: none; cursor: pointer; background: rgba(255,255,255,0.15); color: #fff; }
-.tab-btn.active { background: var(--gold); color: #111; font-weight: bold; }
-.ranking-list { overflow: auto; max-height: 50vh; }
-.ranking-list table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.ranking-list th { background: rgba(255,255,255,0.1); padding: 6px 4px; text-align: center; color: var(--gold); white-space: nowrap; }
-.ranking-list td { padding: 6px 4px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08); white-space: nowrap; }
-.rank-name-cell { display: flex; align-items: center; justify-content: flex-start; gap: 4px; }
-.rank-name-cell .badge-icon { width: 14px; text-align: right; flex-shrink: 0; }
+/* ── 설정/도움말 v2 (카드형, 모바일 세로 기준) ────────────────────────── */
+.settings-box-v2 { width: 100%; max-width: 380px; max-height: 92vh; display: flex; flex-direction: column; color: #fff; background: rgba(0,0,0,0.55); border-radius: 20px; overflow: hidden; }
+.v2-topbar { display: flex; align-items: center; gap: 12px; padding: 18px 18px 14px; flex-shrink: 0; }
+.v2-topbar h2 { margin: 0; font-size: 19px; font-weight: 800; }
+.back-circle { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,0.08); border: none; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; cursor: pointer; }
+.v2-content { padding: 0 18px 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+
+.v2-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 16px; }
+.v2-card.admin { border-color: rgba(201,168,76,0.35); background: rgba(201,168,76,0.06); }
+.admin-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: var(--gold); letter-spacing: 0.03em; margin-bottom: 12px; }
+
+.profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.avatar-big { width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(160deg, rgba(201,168,76,0.35), rgba(201,168,76,0.1)); border: 1px solid rgba(201,168,76,0.4); display: flex; align-items: center; justify-content: center; font-size: 30px; flex-shrink: 0; }
+.profile-head .who .name { font-size: 16px; font-weight: 800; }
+.profile-head .who .role { font-size: 11.5px; color: var(--gold); margin-top: 2px; }
+
+.field-label { display: block; font-size: 11px; color: var(--text-dim); letter-spacing: 0.03em; margin-bottom: 6px; }
+.txt-input { width: 100%; padding: 11px 12px; border-radius: 11px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.22); color: #fff; font-size: 14px; }
+.txt-input:focus { outline: none; border-color: var(--gold); }
+
+.avatar-scroll { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; margin-top: 14px; }
+.avatar-scroll .avatar-item { width: auto; height: auto; aspect-ratio: 1; border-radius: 10px; }
+.avatar-scroll .avatar-item.selected { background: linear-gradient(160deg, var(--gold), #b08d3c); box-shadow: 0 3px 10px rgba(201,168,76,0.35); border-color: transparent; }
+
+.divider-soft { height: 1px; background: rgba(255,255,255,0.08); margin: 16px 0; }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.toggle-row .t-label { font-size: 13.5px; font-weight: 600; }
+.toggle-row .t-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; max-width: 220px; }
+
+.btn-save { width: 100%; padding: 13px 0; margin-top: 16px; border: none; border-radius: 12px; background: linear-gradient(160deg, #ddc07f, var(--gold) 55%, #a9823a); color: #241c06; font-weight: 800; font-size: 14px; letter-spacing: 0.01em; box-shadow: 0 6px 16px rgba(201,168,76,0.3); cursor: pointer; }
+.btn-outline { width: 100%; padding: 10px 0; border-radius: 11px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 13px; margin-top: 8px; cursor: pointer; }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.stat-card .icon { font-size: 18px; }
+.stat-card .label { font-size: 11px; color: var(--text-dim); }
+.stat-card .value { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.btn-charge { align-self: flex-start; padding: 5px 12px; border-radius: 20px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); color: #fff; font-size: 11px; cursor: pointer; }
+
+/* 도움말 카드 내부 텍스트 */
+.v2-card .card-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.v2-card .card-head .ic { font-size: 16px; }
+.v2-card .card-head .tt { font-size: 14px; font-weight: 800; }
+.v2-card p { margin: 0 0 6px; font-size: 12.5px; line-height: 1.6; color: var(--text-light); }
+.v2-card p:last-child { margin-bottom: 0; }
+.v2-card ol, .v2-card ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.7; color: var(--text-light); }
+.v2-card ol li, .v2-card ul li { margin-bottom: 3px; }
+.v2-card b { color: var(--gold); }
+.v2-card .muted-line { font-size: 11px; color: var(--text-dim); margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1); }
+.v2-card.hula { border-color: rgba(201,168,76,0.4); background: rgba(201,168,76,0.08); }
+.v2-card.settle .value-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 4px 0; }
+.v2-card.settle .value-row b { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* ── Ranking v2 (카드형 리스트) ───────────────────────────────────────── */
+.v2-tabs { display: flex; gap: 6px; padding: 0 18px 14px; flex-shrink: 0; }
+.v2-tab { flex: 1; text-align: center; padding: 9px 0; border-radius: 11px; font-size: 13px; font-weight: 700; background: rgba(255,255,255,0.06); color: var(--text-dim); border: none; cursor: pointer; }
+.v2-tab.active { background: linear-gradient(160deg, #ddc07f, var(--gold) 55%, #a9823a); color: #241c06; }
+
+.v2-ranking-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.prow { display: flex; align-items: center; gap: 11px; padding: 11px 12px; border-radius: 14px; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.06); }
+.prow.me { border-color: rgba(120,170,220,0.5); background: rgba(120,170,220,0.08); }
+.prow.rank1 { background: linear-gradient(120deg, rgba(201,168,76,0.22), rgba(201,168,76,0.05)); border-color: rgba(201,168,76,0.4); }
+.prow.presence-clickable { cursor: pointer; }
+.prow.presence-clickable:active, .prow.presence-clickable:hover { background: rgba(201,168,76,0.14); }
+
+.prank { width: 22px; text-align: center; font-size: 12px; font-weight: 800; color: var(--text-dim); flex-shrink: 0; }
+.prow.rank1 .prank { font-size: 16px; }
+
+.pav-wrap { position: relative; flex-shrink: 0; }
+.pav { width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+
+.pbody { flex: 1; min-width: 0; }
+.pname-row { display: flex; align-items: center; gap: 6px; }
+.pname { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pme-tag { font-size: 8.5px; background: rgba(120,170,220,0.25); color: #a8d0ec; padding: 1px 5px; border-radius: 20px; flex-shrink: 0; }
+.pstat-row { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; display: flex; gap: 6px; }
+
+.pvalue { text-align: right; flex-shrink: 0; }
+.pvalue .amt { font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pvalue .rate { font-size: 10.5px; color: var(--text-dim); margin-top: 1px; }
 
 /* ── 접속중 표시 & 초대 ────────────────────────────────────────────────── */
-.presence-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: transparent; flex-shrink: 0; }
-.presence-dot.on { background: #3ecf72; box-shadow: 0 0 0 2px rgba(62,207,114,0.25); }
+.presence-dot { display: none; position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--green-dark); }
+.presence-dot.on { display: block; background: #3ecf72; }
 tr.presence-clickable { cursor: pointer; }
 tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 
