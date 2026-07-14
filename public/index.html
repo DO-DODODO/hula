@@ -67,15 +67,28 @@
   <div id="screen-settings" class="screen">
     <div class="settings-box">
       <h2>설정</h2>
+
+      <div class="settings-section-head">프로필</div>
       <div class="setting-row">
         <label>승리 문구</label>
         <input type="text" id="input-win-message" maxlength="20" placeholder="최대 20자">
-        <button id="btn-save-message" class="btn-primary">저장</button>
       </div>
       <div class="setting-row">
         <label>내 캐릭터</label>
         <div id="avatar-grid" class="avatar-grid"></div>
       </div>
+      <div class="setting-row">
+        <label>접속중 표시</label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="input-show-online">
+          <span class="toggle-track"><span class="toggle-knob"></span></span>
+        </label>
+        <span style="color:var(--text-dim);font-size:12px">끄면 다른 사람 접속 상태도 안 보여요</span>
+      </div>
+      <button id="btn-save-message" class="btn-primary" style="width:100%">저장</button>
+
+      <hr>
+      <div class="settings-section-head">재화</div>
       <div class="setting-row">
         <label>싱글 포인트</label>
         <span id="single-points-display"></span>
@@ -86,11 +99,7 @@
         <span id="multi-balance-display"></span>
         <button id="btn-charge-multi" class="btn-secondary">충전</button>
       </div>
-      <div class="setting-row">
-        <label>접속중 표시</label>
-        <input type="checkbox" id="input-show-online">
-        <span style="color:var(--text-dim);font-size:12px">끄면 다른 사람 접속 상태도 안 보여요</span>
-      </div>
+
       <div id="admin-settings" style="display:none">
         <hr>
         <h3>관리자 메뉴</h3>

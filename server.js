@@ -69,8 +69,13 @@ function visibleOnlineCodes() {
   return out;
 }
 
+// 상호차단: 내가 표시를 끄면 나도 남 상태를 못 봄. 단, 관리자는 초대 기능 때문에 예외로 항상 봄.
 function broadcastPresence() {
-  io.emit('presenceList', { online: visibleOnlineCodes() });
+  const online = visibleOnlineCodes();
+  for (const [sid, sess] of sessions) {
+    const canSee = sess.isAdmin || sess.showOnline !== false;
+    io.to(sid).emit('presenceList', { online: canSee ? online : [] });
+  }
 }
 
 // 초대 때문에 자동 일시정지된 싱글 게임을 원상복구 (거절/취소/연결끊김 시 호출)
@@ -573,7 +578,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    sessions.set(socket.id, { userCode: user.userCode, userName: user.userName, showOnline: user.showOnline !== 0 });
+    sessions.set(socket.id, { userCode: user.userCode, userName: user.userName, showOnline: user.showOnline !== 0, isAdmin: user.isAdmin === 1 });
     socket.emit('loginSuccess', {
       userCode: user.userCode, userName: user.userName,
       isAdmin: user.isAdmin === 1,
@@ -1222,7 +1227,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('getRanking', async () => {
-    const online = new Set(visibleOnlineCodes());
+    const sess = sessions.get(socket.id);
+    const canSee = sess?.isAdmin || sess?.showOnline !== false;
+    const online = new Set(canSee ? visibleOnlineCodes() : []);
     const mark = rows => rows.map(r => ({ ...r, online: online.has(r.userCode) }));
     socket.emit('ranking', {
       multi: mark(await db.getMultiRanking()),

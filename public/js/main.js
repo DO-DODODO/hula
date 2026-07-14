@@ -187,14 +187,26 @@ document.getElementById('btn-settings').onclick = () => {
 };
 document.getElementById('btn-back-settings').onclick = () => showScreen('screen-main');
 
+function toast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  Object.assign(t.style, {
+    position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
+    background: '#1e1e1e', color: '#fff', padding: '10px 16px', borderRadius: '8px',
+    fontSize: '13px', zIndex: '3000', boxShadow: '0 8px 20px rgba(0,0,0,0.5)',
+    maxWidth: '80vw', textAlign: 'center', border: '1px solid rgba(62,207,114,0.4)'
+  });
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+
 document.getElementById('btn-save-message').onclick = () => {
   const msg = document.getElementById('input-win-message').value.trim().slice(0, 20);
   socket.emit('setWinMessage', { message: msg || '오예!' });
 };
 socket.on('winMessageSaved', () => {
   me.winMessage = document.getElementById('input-win-message').value.trim() || '오예!';
-  document.getElementById('settings-msg').textContent = '저장되었습니다.';
-  setTimeout(() => document.getElementById('settings-msg').textContent = '', 2000);
+  toast('✓ 저장되었습니다');
 });
 
 socket.on('avatarSaved', ({ avatar }) => {
