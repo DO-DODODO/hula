@@ -275,11 +275,11 @@ function activateThankYouWindow(game, card) {
     broadcastLog(game, `${cur.userName} 생각 중...`);
     startTimer(game);
 
-    // 현재 플레이어·버린 플레이어 제외한 다른 AI가 땡큐 고려 (1.5~5초 랜덤 대기 후, 그 시점에 판단)
+    // 현재 플레이어·버린 플레이어 제외한 다른 AI가 땡큐 고려 (1.5~4초 랜덤 대기 후, 그 시점에 판단)
     const windowCard = game.thankYou.card; // 이 창이 열릴 때의 카드 (늦게 발동돼도 다른 창의 카드로 오판하지 않도록 고정)
     for (const p of game.players) {
       if (!p.isAI || p.userCode === cur.userCode || p.userCode === discarderCode) continue;
-      const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
+      const d = [1500, 2000, 3000, 4000][Math.floor(Math.random() * 4)];
       setTimeout(() => {
         if (!game.thankYou.active || game.thankYou.card !== windowCard || game.thankYou.lock || game.paused) return;
         const card = game.thankYou.card;
@@ -1181,7 +1181,7 @@ io.on('connection', (socket) => {
       const windowCard = game.thankYou.card; // 이 창이 열릴 때의 카드 (늦게 발동돼도 다른 창의 카드로 오판하지 않도록 고정)
       for (const p of game.players) {
         if (!p.isAI || p.userCode === cur?.userCode || p.userCode === discarderCode) continue;
-        const d = [1500, 2000, 3000, 4000, 5000][Math.floor(Math.random() * 5)];
+        const d = [1500, 2000, 3000, 4000][Math.floor(Math.random() * 4)];
         setTimeout(() => {
           if (!game.thankYou.active || game.thankYou.card !== windowCard || game.thankYou.lock || game.paused) return;
           const card = game.thankYou.card;
