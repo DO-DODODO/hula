@@ -1,0 +1,238 @@
+<title>훌라 — 이벤트 메뉴 시안</title>
+<style>
+  :root {
+    --studio-bg: #eef1ec; --studio-surface: #ffffff; --studio-text: #1c2420;
+    --studio-muted: #5b665f; --studio-accent: #9c7a2e; --studio-border: #dadfd7;
+    --studio-shadow: rgba(28,36,32,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --studio-bg:#14181a; --studio-surface:#1b2123; --studio-text:#eef0ec; --studio-muted:#939d95; --studio-accent:#d9bd75; --studio-border:#2a3134; --studio-shadow: rgba(0,0,0,0.45); }
+  }
+  :root[data-theme="light"] { --studio-bg:#eef1ec; --studio-surface:#ffffff; --studio-text:#1c2420; --studio-muted:#5b665f; --studio-accent:#9c7a2e; --studio-border:#dadfd7; --studio-shadow: rgba(28,36,32,0.10); }
+  :root[data-theme="dark"] { --studio-bg:#14181a; --studio-surface:#1b2123; --studio-text:#eef0ec; --studio-muted:#939d95; --studio-accent:#d9bd75; --studio-border:#2a3134; --studio-shadow: rgba(0,0,0,0.45); }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--studio-bg); color:var(--studio-text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif; }
+  .wrap { max-width: 720px; margin:0 auto; padding: 48px 24px 80px; display:flex; flex-direction:column; align-items:center; }
+  .eyebrow { font-size:12px; letter-spacing:0.14em; text-transform:uppercase; color:var(--studio-accent); font-weight:700; margin-bottom:10px; align-self:flex-start; }
+  h1 { font-size:24px; margin:0 0 10px; text-wrap:balance; align-self:flex-start; }
+  .lede { font-size:14px; line-height:1.7; color:var(--studio-muted); max-width:60ch; margin-bottom:32px; align-self:flex-start; }
+
+  .frame { background:#0a2e19; border-radius:36px; padding:14px; box-shadow: 0 20px 50px var(--studio-shadow); width: 100%; max-width: 380px; }
+  .screen {
+    --green:#1a6b3a; --green-dark:#0f2f1c; --gold:#c9a84c; --gold-soft: #e2c877;
+    --text-light:#f3f3f0; --text-dim:#9aa79e;
+    background: linear-gradient(175deg, #1c7440 0%, #0f2f1c 62%);
+    border-radius:26px; color:var(--text-light); font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+    min-height: 780px; position:relative; overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+
+  .topbar { display:flex; align-items:center; gap:12px; padding: 20px 20px 6px; flex-shrink:0; }
+  .back-circle { width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
+  .topbar h2 { margin:0; font-size:19px; font-weight:800; }
+
+  .content { padding: 10px 18px 18px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
+
+  /* 카운트다운 배너 */
+  .countdown-banner {
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    background: linear-gradient(120deg, rgba(201,168,76,0.22), rgba(201,168,76,0.06));
+    border:1px solid rgba(201,168,76,0.4); border-radius:14px; padding:10px 14px;
+    font-size:12.5px; font-weight:700; color:var(--gold-soft);
+  }
+  .week-range { text-align:center; font-size:11px; color:var(--text-dim); margin-top:-4px; }
+
+  .v2-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 16px; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .card-head .tt { display:flex; align-items:center; gap:7px; font-size:13.5px; font-weight:800; }
+  .card-head .live-tag { font-size:9px; background:rgba(80,200,120,0.2); color:#7fe0a0; padding:2px 7px; border-radius:20px; font-weight:700; }
+  .reward-hint { font-size:10px; color:var(--text-dim); margin:-4px 0 8px; }
+  .reward-hint.gold-hint { color:var(--gold-soft); font-weight:700; }
+  .hula-card { border-color: rgba(201,168,76,0.35); background: rgba(201,168,76,0.07); }
+
+  .mini-row { display:flex; align-items:center; gap:9px; padding:6px 0; }
+  .mini-row + .mini-row { border-top:1px solid rgba(255,255,255,0.06); }
+  .mini-rank { width:18px; font-size:12px; font-weight:800; color:var(--text-dim); text-align:center; flex-shrink:0; }
+  .mini-row.lead .mini-rank { color:var(--gold-soft); }
+  .mini-av { width:26px; height:26px; border-radius:8px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
+  .mini-name { flex:1; font-size:12.5px; font-weight:600; }
+  .mini-count { font-size:12.5px; font-weight:800; font-variant-numeric: tabular-nums; }
+  .mini-count.gold { color: var(--gold-soft); }
+
+  /* 지난 주 수상자 카드 */
+  .winner-card { background: linear-gradient(120deg, rgba(201,168,76,0.18), rgba(201,168,76,0.04)); border:1px solid rgba(201,168,76,0.35); }
+  .winner-row { display:flex; align-items:center; gap:10px; padding:6px 0; }
+  .winner-row + .winner-row { border-top:1px dashed rgba(255,255,255,0.1); }
+  .winner-badge { font-size:16px; }
+  .winner-name { font-size:12.5px; font-weight:700; flex:1; }
+  .winner-amt { font-size:11.5px; color:var(--gold-soft); font-weight:700; }
+  .view-all-btn { width:100%; margin-top:10px; padding:9px 0; border-radius:10px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); color:var(--gold-soft); font-size:11.5px; font-weight:700; cursor:pointer; }
+
+  /* 역대 수상자 화면 */
+  .history-week { margin-bottom:4px; }
+  .history-week-label { font-size:10px; color:var(--text-dim); margin: 2px 0 6px; letter-spacing:0.02em; }
+
+  .notes { margin-top:36px; font-size:13px; line-height:1.8; color:var(--studio-muted); max-width:64ch; align-self:flex-start; }
+  .notes li { margin-bottom:6px; }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Hula · Event Menu</div>
+  <h1>이벤트 메뉴 — 시안</h1>
+  <p class="lede">메인 화면 랭킹/설정/도움말 옆에 "이벤트" 아이콘을 추가해서 들어오는 화면이에요. 실시간 진행 순위 + 지난 주 결과 + 카운트다운으로 구성했어요.</p>
+
+  <div class="frame">
+    <div class="screen">
+      <div class="topbar"><div class="back-circle">←</div><h2>이벤트</h2></div>
+
+      <div class="content">
+        <div class="countdown-banner">⏰ 3일 12시간 후 정산</div>
+        <div class="week-range">이번 주 · 7.13(월) ~ 7.19(일)</div>
+
+        <div class="v2-card">
+          <div class="card-head">
+            <span class="tt">🎮 최다판 현재 순위</span>
+            <span class="live-tag">LIVE</span>
+          </div>
+          <div class="reward-hint">1위 보상: 500pt</div>
+          <div class="mini-row lead">
+            <span class="mini-rank">1</span>
+            <span class="mini-av">🦁</span>
+            <span class="mini-name">관리자</span>
+            <span class="mini-count gold">14판</span>
+          </div>
+          <div class="mini-row">
+            <span class="mini-rank">2</span>
+            <span class="mini-av">🐸</span>
+            <span class="mini-name">다우니</span>
+            <span class="mini-count">11판</span>
+          </div>
+          <div class="mini-row">
+            <span class="mini-rank">3</span>
+            <span class="mini-av">🐰</span>
+            <span class="mini-name">서연</span>
+            <span class="mini-count">7판</span>
+          </div>
+        </div>
+
+        <div class="v2-card">
+          <div class="card-head">
+            <span class="tt">🏆 최다승 현재 순위</span>
+            <span class="live-tag">LIVE</span>
+          </div>
+          <div class="reward-hint">1위 보상: 5만원</div>
+          <div class="mini-row lead">
+            <span class="mini-rank">1</span>
+            <span class="mini-av">🐸</span>
+            <span class="mini-name">다우니</span>
+            <span class="mini-count gold">8승</span>
+          </div>
+          <div class="mini-row">
+            <span class="mini-rank">2</span>
+            <span class="mini-av">🦁</span>
+            <span class="mini-name">관리자</span>
+            <span class="mini-count">6승</span>
+          </div>
+          <div class="mini-row">
+            <span class="mini-rank">3</span>
+            <span class="mini-av">🐰</span>
+            <span class="mini-name">서연</span>
+            <span class="mini-count">4승</span>
+          </div>
+        </div>
+
+        <div class="v2-card hula-card">
+          <div class="card-head">
+            <span class="tt">🎉 이번 주 최다 훌라</span>
+            <span class="live-tag">LIVE</span>
+          </div>
+          <div class="reward-hint gold-hint">1위 보상: 500pt + 5만원</div>
+          <div class="mini-row lead">
+            <span class="mini-rank">1</span>
+            <span class="mini-av">🦁</span>
+            <span class="mini-name">관리자</span>
+            <span class="mini-count gold">2회</span>
+          </div>
+          <div class="mini-row">
+            <span class="mini-rank">2</span>
+            <span class="mini-av">🐸</span>
+            <span class="mini-name">다우니</span>
+            <span class="mini-count">1회</span>
+          </div>
+        </div>
+
+        <div class="v2-card winner-card">
+          <div class="card-head">
+            <span class="tt">🎉 지난 주 수상자</span>
+          </div>
+          <div class="week-range" style="margin:-4px 0 6px">7.6(월) ~ 7.12(일)</div>
+          <div class="winner-row">
+            <span class="winner-badge">🎮</span>
+            <span class="winner-name">최다판 — 관리자</span>
+            <span class="winner-amt">+500pt</span>
+          </div>
+          <div class="winner-row">
+            <span class="winner-badge">🏆</span>
+            <span class="winner-name">최다승 — 다우니</span>
+            <span class="winner-amt">+5만원</span>
+          </div>
+          <div class="winner-row">
+            <span class="winner-badge">🎉</span>
+            <span class="winner-name">최다 훌라 — 관리자</span>
+            <span class="winner-amt">+500pt +5만원</span>
+          </div>
+          <button class="view-all-btn">역대 수상자 전체보기 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="notes">
+    <li>진행 중인 순위엔 "LIVE" 태그를 붙여서, 지난 주 결과랑 헷갈리지 않게 구분했어요.</li>
+    <li>지난 주 수상자 카드는 예시처럼 같은 사람이 둘 다 받으면 두 줄 다 나와요(따로 합계 표시는 안 하고 각 항목 그대로 나열 — 메인화면 축하 레이어에서 합계는 이미 보여줬으니까 여기선 내역 위주).</li>
+    <li>카운트다운 배너는 항상 상단 고정 — 마감 임박하면 색을 좀 더 다급하게(빨간기) 바꾸는 것도 나중에 고려 가능.</li>
+    <li>보상이 부문마다 달라요 — 최다판 500pt만, 최다승 5만원만, 최다 훌라(이번 주 기준)는 500pt+5만원 둘 다. 그래서 각 카드 상단에 "1위 보상" 문구를 작게 넣어서 뭘 걸고 경쟁하는지 바로 보이게 했어요. 최다 훌라 카드는 골드 톤으로 살짝 더 특별해 보이게.</li>
+    <li>당장은 세 카드지만, 나중에 다른 이벤트 생기면 이 아래로 카드만 추가하면 되는 구조예요.</li>
+  </ul>
+
+  <div style="align-self:flex-start; margin-top:56px; font-size:15px; font-weight:800">역대 수상자 화면 (전체보기 클릭 시)</div>
+  <p class="lede" style="margin-top:10px">주차별로 묶어서 최신순으로 쭉 나열 — 리스트가 계속 길어지는 구조라 스크롤로.</p>
+
+  <div class="frame">
+    <div class="screen">
+      <div class="topbar"><div class="back-circle">←</div><h2>역대 수상자</h2></div>
+      <div class="content">
+        <div class="history-week">
+          <div class="history-week-label">7.6(월) ~ 7.12(일)</div>
+          <div class="v2-card winner-card">
+            <div class="winner-row"><span class="winner-badge">🎮</span><span class="winner-name">최다판 — 관리자</span><span class="winner-amt">+500pt</span></div>
+            <div class="winner-row"><span class="winner-badge">🏆</span><span class="winner-name">최다승 — 다우니</span><span class="winner-amt">+5만원</span></div>
+            <div class="winner-row"><span class="winner-badge">🎉</span><span class="winner-name">최다 훌라 — 관리자</span><span class="winner-amt">+500pt +5만원</span></div>
+          </div>
+        </div>
+        <div class="history-week">
+          <div class="history-week-label">6.29(월) ~ 7.5(일)</div>
+          <div class="v2-card winner-card">
+            <div class="winner-row"><span class="winner-badge">🎮</span><span class="winner-name">최다판 — 다우니</span><span class="winner-amt">+500pt</span></div>
+            <div class="winner-row"><span class="winner-badge">🏆</span><span class="winner-name">최다승 — 서연</span><span class="winner-amt">+5만원</span></div>
+            <div class="winner-row"><span class="winner-name" style="color:var(--text-dim)">최다 훌라 — 이번 주는 없음</span></div>
+          </div>
+        </div>
+        <div class="history-week">
+          <div class="history-week-label">6.22(월) ~ 6.28(일)</div>
+          <div class="v2-card winner-card" style="opacity:0.6">
+            <div class="winner-row"><span class="winner-badge">🎮</span><span class="winner-name">최다판 — 관리자</span><span class="winner-amt">+500pt</span></div>
+            <div class="winner-row"><span class="winner-name" style="color:var(--text-dim)">최다승 — 이번 주는 없음</span></div>
+            <div class="winner-row"><span class="winner-name" style="color:var(--text-dim)">최다 훌라 — 이번 주는 없음</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="notes">
+    <li>아무도 안 받은 부문(최다승 0회 등)은 회색으로 "이번 주는 없음"이라고 명시해서, 데이터 누락처럼 보이지 않게 했어요.</li>
+    <li>이 화면은 매주 지급 기록이 쌓이는 대로 계속 길어지는 구조라, 나중에 항목이 많아지면 페이지네이션이나 "더 보기" 버튼 추가를 고려하면 돼요.</li>
+  </ul>
+</div>
