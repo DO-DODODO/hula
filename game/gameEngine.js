@@ -142,6 +142,14 @@ function registerCards(game, playerCode, cardIds) {
   if (game.phase !== 'action') return { ok: false, msg: '행동 단계가 아닙니다' };
   if (getCurrentPlayer(game).userCode !== playerCode) return { ok: false, msg: '당신 차례가 아닙니다' };
 
+  // 땡큐 테이커는 땡큐 카드를 먼저 사용해야 다른 카드로 등록/붙이기 할 수 없음
+  if (game.thankYouTaker === playerCode && game.thankYouTakerCard) {
+    const stillInHand = player.hand.some(c => c.id === game.thankYouTakerCard.id);
+    if (stillInHand && !cardIds.includes(game.thankYouTakerCard.id)) {
+      return { ok: false, msg: '땡큐 카드를 먼저 사용하세요' };
+    }
+  }
+
   const cards = cardIds.map(id => player.hand.find(c => c.id === id)).filter(Boolean);
   if (cards.length !== cardIds.length) return { ok: false, msg: '카드를 찾을 수 없습니다' };
   if (!isValidCombo(cards)) return { ok: false, msg: '유효하지 않은 조합입니다' };
@@ -174,6 +182,14 @@ function attachCards(game, playerCode, cardIds, comboId) {
   if (!player.registered) return { ok: false, msg: '먼저 등록을 완료해야 합니다' };
   if (game.phase !== 'action') return { ok: false, msg: '행동 단계가 아닙니다' };
   if (getCurrentPlayer(game).userCode !== playerCode) return { ok: false, msg: '당신 차례가 아닙니다' };
+
+  // 땡큐 테이커는 땡큐 카드를 먼저 사용해야 다른 카드로 등록/붙이기 할 수 없음
+  if (game.thankYouTaker === playerCode && game.thankYouTakerCard) {
+    const stillInHand = player.hand.some(c => c.id === game.thankYouTakerCard.id);
+    if (stillInHand && !cardIds.includes(game.thankYouTakerCard.id)) {
+      return { ok: false, msg: '땡큐 카드를 먼저 사용하세요' };
+    }
+  }
 
   const combo = game.combos.find(c => c.id === comboId);
   if (!combo) return { ok: false, msg: '조합을 찾을 수 없습니다' };
