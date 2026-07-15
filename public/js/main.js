@@ -538,17 +538,39 @@ function msRenderMeCards(summary) {
   );
 }
 
-function msRenderAllCards(records) {
-  const mode = mystatsMode;
-  const holder = (rec, valFn) => rec
+function msFormatMiniDate(unixSec) {
+  if (unixSec == null) return '-';
+  const d = new Date(unixSec * 1000);
+  return `${d.getMonth() + 1}.${d.getDate()}`;
+}
+
+// 최고 획득자/손실자: 항상 1명 (pointChange는 연속값이라 동점 드묾)
+function msHolderSingle(rec, valFn) {
+  return rec
     ? `<div class="holder"><span class="holder-av">${msAvatarEmoji(rec.avatar)}</span><span class="holder-name">${rec.userName}</span></div>
        ${valFn(rec)}<div class="date">${msFormatCardDate(rec.playedAt)}</div>`
     : '<div class="empty">기록 없음</div>';
+}
+
+// 최다연승자/연패자: 공동 기록이면 전부 같이 표시
+function msHolderStreak(recs, color, unit) {
+  if (!recs || recs.length === 0) return '<div class="empty">기록 없음</div>';
+  if (recs.length === 1) {
+    const r = recs[0];
+    return `<div class="holder"><span class="holder-av">${msAvatarEmoji(r.avatar)}</span><span class="holder-name">${r.userName}</span></div>
+      <div class="val" style="color:${color}">${r.count}${unit}</div><div class="date">${msFormatCardDate(r.playedAt)}</div>`;
+  }
+  const rows = recs.map(r => `<div class="holder-multi-row"><span class="holder-av">${msAvatarEmoji(r.avatar)}</span><span class="holder-name">${r.userName}</span><span class="mini-date">${msFormatMiniDate(r.playedAt)}</span></div>`).join('');
+  return `<div class="tie-val" style="color:${color}">${recs[0].count}${unit}<span class="tie-tag">공동 ${recs.length}명</span></div><div class="holder-multi">${rows}</div>`;
+}
+
+function msRenderAllCards(records) {
+  const mode = mystatsMode;
   return (
-    `<div class="ms-card"><div class="ic-lb"><span style="color:#7fd88f">▲ 최고 획득자</span></div>${holder(records.maxGain, r => `<div class="val pos">${msFormatSigned(r.value, mode)}</div>`)}</div>` +
-    `<div class="ms-card"><div class="ic-lb"><span style="color:#e08f8f">▼ 최고 손실자</span></div>${holder(records.maxLoss, r => `<div class="val neg">${msFormatSigned(r.value, mode)}</div>`)}</div>` +
-    `<div class="ms-card"><div class="ic-lb">🔥 최다연승자</div>${holder(records.maxWinStreak, r => `<div class="val" style="color:var(--gold)">${r.count}연승</div>`)}</div>` +
-    `<div class="ms-card"><div class="ic-lb">💧 최다연패자</div>${holder(records.maxLoseStreak, r => `<div class="val" style="color:var(--text-dim)">${r.count}연패</div>`)}</div>`
+    `<div class="ms-card"><div class="ic-lb"><span style="color:#7fd88f">▲ 최고 획득자</span></div>${msHolderSingle(records.maxGain, r => `<div class="val pos">${msFormatSigned(r.value, mode)}</div>`)}</div>` +
+    `<div class="ms-card"><div class="ic-lb"><span style="color:#e08f8f">▼ 최고 손실자</span></div>${msHolderSingle(records.maxLoss, r => `<div class="val neg">${msFormatSigned(r.value, mode)}</div>`)}</div>` +
+    `<div class="ms-card"><div class="ic-lb">🔥 최다연승자</div>${msHolderStreak(records.maxWinStreak, 'var(--gold)', '연승')}</div>` +
+    `<div class="ms-card"><div class="ic-lb">💧 최다연패자</div>${msHolderStreak(records.maxLoseStreak, 'var(--text-dim)', '연패')}</div>`
   );
 }
 

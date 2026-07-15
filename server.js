@@ -1333,7 +1333,9 @@ io.on('connection', (socket) => {
       byUser.get(r.userCode).push(r);
     }
 
-    let globalMaxGain = null, globalMaxLoss = null, globalMaxWin = null, globalMaxLose = null;
+    let globalMaxGain = null, globalMaxLoss = null;
+    let globalMaxWinCount = 0, globalMaxWinHolders = [];
+    let globalMaxLoseCount = 0, globalMaxLoseHolders = [];
     for (const [userCode, rows] of byUser) {
       const u = userMap.get(userCode);
       if (!u) continue;
@@ -1345,11 +1347,15 @@ io.on('connection', (socket) => {
       if (mm.maxLoss && (!globalMaxLoss || mm.maxLoss.value < globalMaxLoss.value)) {
         globalMaxLoss = { ...mm.maxLoss, userCode, userName: u.userName, avatar: u.avatar };
       }
-      if (st.maxWinStreak.count > 0 && (!globalMaxWin || st.maxWinStreak.count > globalMaxWin.count)) {
-        globalMaxWin = { ...st.maxWinStreak, userCode, userName: u.userName, avatar: u.avatar };
+      if (st.maxWinStreak.count > 0) {
+        const holder = { ...st.maxWinStreak, userCode, userName: u.userName, avatar: u.avatar };
+        if (st.maxWinStreak.count > globalMaxWinCount) { globalMaxWinCount = st.maxWinStreak.count; globalMaxWinHolders = [holder]; }
+        else if (st.maxWinStreak.count === globalMaxWinCount) { globalMaxWinHolders.push(holder); }
       }
-      if (st.maxLoseStreak.count > 0 && (!globalMaxLose || st.maxLoseStreak.count > globalMaxLose.count)) {
-        globalMaxLose = { ...st.maxLoseStreak, userCode, userName: u.userName, avatar: u.avatar };
+      if (st.maxLoseStreak.count > 0) {
+        const holder = { ...st.maxLoseStreak, userCode, userName: u.userName, avatar: u.avatar };
+        if (st.maxLoseStreak.count > globalMaxLoseCount) { globalMaxLoseCount = st.maxLoseStreak.count; globalMaxLoseHolders = [holder]; }
+        else if (st.maxLoseStreak.count === globalMaxLoseCount) { globalMaxLoseHolders.push(holder); }
       }
     }
 
@@ -1381,7 +1387,10 @@ io.on('connection', (socket) => {
 
     socket.emit('myStats', {
       mode, scope, period, myRank,
-      records: { maxGain: globalMaxGain, maxLoss: globalMaxLoss, maxWinStreak: globalMaxWin, maxLoseStreak: globalMaxLose },
+      records: {
+        maxGain: globalMaxGain, maxLoss: globalMaxLoss,
+        maxWinStreak: globalMaxWinHolders, maxLoseStreak: globalMaxLoseHolders,
+      },
       trend: {
         dates: dateKeys,
         me: { cumulative: myCumulativeAnchored.map(p => p.value), winRate20: myTrend.winRate20.map(p => p.value) },
