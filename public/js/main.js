@@ -541,7 +541,7 @@ function msRenderMeCards(summary) {
 function msFormatMiniDate(unixSec) {
   if (unixSec == null) return '-';
   const d = new Date(unixSec * 1000);
-  return `${d.getMonth() + 1}.${d.getDate()}`;
+  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
 }
 
 // 최고 획득자/손실자: 항상 1명 (pointChange는 연속값이라 동점 드묾)
