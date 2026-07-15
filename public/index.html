@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라</title>
-  <link rel="stylesheet" href="css/style.css?v=15">
+  <link rel="stylesheet" href="css/style.css?v=16">
 </head>
 <body>
   <div id="network-banner">🔌 연결이 끊겼습니다. 재연결 중...</div>
@@ -54,6 +54,7 @@
 
       <div class="sub-menu">
         <button id="btn-ranking" class="sub-item"><span class="sub-item-ic">🏅</span><span class="sub-item-lb">랭킹</span></button>
+        <button id="btn-mystats" class="sub-item"><span class="sub-item-ic">📈</span><span class="sub-item-lb">통계</span></button>
         <button id="btn-settings" class="sub-item"><span class="sub-item-ic">⚙️</span><span class="sub-item-lb">설정</span></button>
         <button id="btn-help" class="sub-item"><span class="sub-item-ic">❓</span><span class="sub-item-lb">도움말</span></button>
       </div>
@@ -196,6 +197,25 @@
     </div>
   </div>
 
+  <!-- My Stats Screen -->
+  <div id="screen-mystats" class="screen">
+    <div class="settings-box-v2">
+      <div class="v2-topbar">
+        <button id="btn-back-mystats" class="back-circle" aria-label="뒤로">←</button>
+        <h2>내 통계</h2>
+      </div>
+      <div class="v2-tabs">
+        <button id="mystats-tab-me" class="v2-tab active">나</button>
+        <button id="mystats-tab-all" class="v2-tab">전체</button>
+      </div>
+      <div class="mystats-tier2">
+        <button id="mystats-mode-single" class="mystats-tier2-btn active">싱글</button>
+        <button id="mystats-mode-multi" class="mystats-tier2-btn">멀티</button>
+      </div>
+      <div id="mystats-content" class="mystats-content"></div>
+    </div>
+  </div>
+
   <!-- Help Screen -->
   <div id="screen-help" class="screen">
     <div class="settings-box-v2">
@@ -252,7 +272,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/main.js?v=6"></script>
+  <script src="js/main.js?v=7"></script>
   <script src="js/presence.js?v=1"></script>
 </body>
 </html>

@@ -73,10 +73,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--gree
 .mode-card-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .mode-card-go { font-size: 16px; color: var(--text-dim); flex-shrink: 0; }
 
-.sub-menu { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
-.sub-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 6px; border-radius: 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
-.sub-item-ic { font-size: 19px; }
-.sub-item-lb { font-size: 11.5px; color: var(--text-light); }
+.sub-menu { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+.sub-item { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px 4px; border-radius: 13px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
+.sub-item-ic { font-size: 17px; }
+.sub-item-lb { font-size: 10.5px; color: var(--text-light); }
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 .btn-primary { padding: 12px 24px; background: var(--gold); color: #111; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
@@ -203,6 +203,52 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .pvalue { text-align: right; flex-shrink: 0; white-space: nowrap; }
 .pvalue .amt { font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pvalue .rate { font-size: 10.5px; color: var(--text-dim); margin-top: 1px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── 내 통계 ───────────────────────────────────────────────────────────── */
+.mystats-tier2 { display: flex; gap: 4px; margin: 0 16px 12px; padding: 4px; background: rgba(0,0,0,0.28); border-radius: 12px; box-shadow: inset 0 1px 4px rgba(0,0,0,0.4); flex-shrink: 0; }
+.mystats-tier2-btn { flex: 1; text-align: center; padding: 6px 0; border-radius: 9px; font-size: 10.5px; font-weight: 700; background: transparent; color: var(--text-dim); border: none; cursor: pointer; }
+.mystats-tier2-btn.active { background: rgba(255,255,255,0.12); color: var(--text-light); }
+
+.mystats-content { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+
+.ms-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ms-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 10px 11px; }
+.ms-card .ic-lb { display: flex; align-items: center; gap: 4px; font-size: 9.5px; color: var(--text-dim); margin-bottom: 5px; white-space: nowrap; }
+.ms-card .val { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ms-card .val.pos { color: #7fd88f; }
+.ms-card .val.neg { color: #e08f8f; }
+.ms-card .date { font-size: 9px; color: var(--text-dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.ms-card .holder { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+.ms-card .holder-av { width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+.ms-card .holder-name { font-size: 12px; font-weight: 800; color: var(--text-light); }
+.ms-card .empty { font-size: 11px; color: var(--text-dim); }
+
+.ms-chart-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px 14px 10px; }
+.ms-chart-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 8px; }
+.ms-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.08); border-radius: 999px; padding: 5px 10px; font-size: 10.5px; font-weight: 700; color: var(--text-light); cursor: pointer; }
+.ms-chip .care { font-size: 8px; color: var(--text-dim); }
+.ms-chart-now { font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.ms-rank-pill { font-size: 10px; font-weight: 800; background: var(--gold-soft); color: var(--gold); padding: 3px 9px; border-radius: 999px; flex-shrink: 0; }
+.ms-chart-sub { font-size: 9.5px; color: var(--text-dim); margin-bottom: 2px; }
+
+.ms-chart-plot { display: flex; gap: 6px; }
+.ms-y-axis { display: flex; flex-direction: column; justify-content: space-between; padding: 2px 0; flex-shrink: 0; }
+.ms-y-axis span { font-size: 8.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ms-x-axis { display: flex; justify-content: space-between; margin-top: 3px; padding-left: 34px; }
+.ms-x-axis span { font-size: 8.5px; color: var(--text-dim); }
+
+.ms-chart-range { display: flex; gap: 5px; margin-top: 10px; }
+.ms-range-pill { font-size: 9.5px; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--text-dim); font-weight: 700; border: none; cursor: pointer; }
+.ms-range-pill.active { background: var(--gold-soft); color: var(--gold); }
+
+.ms-rank-legend { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+.ms-rlg-item { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; color: var(--text-dim); }
+.ms-rlg-item .swatch { width: 13px; height: 2.5px; border-radius: 2px; flex-shrink: 0; }
+.ms-rlg-item .badge { font-size: 12px; width: 16px; text-align: center; flex-shrink: 0; }
+.ms-rlg-item.me { color: var(--text-light); }
+.ms-rlg-item .nm-tag { background: var(--gold-soft); color: var(--gold); font-size: 9px; padding: 1px 6px; border-radius: 999px; margin-left: 2px; }
+
+.ms-empty-msg { text-align: center; color: var(--text-dim); font-size: 12.5px; padding: 30px 0; }
 
 /* ── 접속중 표시 & 초대 ────────────────────────────────────────────────── */
 .presence-dot { display: none; position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--green-dark); }

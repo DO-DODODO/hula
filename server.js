@@ -13,6 +13,7 @@ const {
 const { decideDraw, decideActions, decideAttach, decideDiscard, isCardUseful, findCombos } = require('./game/aiPlayer');
 const { canAttach, cardName } = require('./game/cardUtils');
 const { getUserCount } = require('./db/database');
+const statsUtils = require('./game/statsUtils');
 
 const app = express();
 const server = http.createServer(app);
@@ -529,7 +530,8 @@ async function endGame(game, winnerCode) {
   // 실제 1등(덱 소진 시에도 포함)을 다음 판 선공 결정에 활용
   const actualWinnerCode = results.find(r => r.rank === 1)?.userCode || null;
 
-  await db.saveGameResult(game.id, game.mode, results, isHula);
+  const continuedFlag = game.mode === 'single' ? !!game.continuedFromPrevious : null;
+  await db.saveGameResult(game.id, game.mode, results, isHula, continuedFlag);
   // 방금 훌라로 이겼으면 훌라왕이 바로 갱신됐을 수 있음 — 정산 화면에 즉시 반영
   const hulaRanking = await db.getHulaRanking();
   game.hulaKingCode = hulaRanking[0]?.userCode ?? null;
@@ -856,7 +858,7 @@ io.on('connection', (socket) => {
     socket.emit('chargeResult', { ...result, singlePoints: user.singlePoints, multiBalance: user.multiBalance });
   });
 
-  socket.on('startSingle', async () => {
+  socket.on('startSingle', async ({ continued } = {}) => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
     const user = await db.getUser(sess.userCode);
@@ -900,6 +902,7 @@ io.on('connection', (socket) => {
     }
 
     const game = createGame('single', players);
+    game.continuedFromPrevious = !!continued;
     await snapshotRank1(game);
     singleGames.set(user.userCode, game);
     socket.emit('gameState', getPublicState(game, user.userCode));
@@ -1287,6 +1290,96 @@ io.on('connection', (socket) => {
       multi: mark(multiRows),
       single: mark(singleRows),
       hula: mark(hulaRows)
+    });
+  });
+
+  socket.on('getMyStats', async ({ mode, scope, period } = {}) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    mode = mode === 'multi' ? 'multi' : 'single';
+    scope = scope === 'all' ? 'all' : 'me';
+    period = ['week', 'month', 'all'].includes(period) ? period : 'month';
+
+    const myRows = await db.getGameResultsForUser(sess.userCode, mode);
+    const { maxGain, maxLoss } = statsUtils.computeMaxMinPointChange(myRows);
+    const { maxWinStreak, maxLoseStreak } = statsUtils.computeStreaks(myRows);
+    const myTrend = statsUtils.buildTrendSeries(myRows, period);
+
+    if (scope === 'me') {
+      socket.emit('myStats', {
+        mode, scope, period,
+        summary: { maxGain, maxLoss, maxWinStreak, maxLoseStreak },
+        trend: {
+          dates: myTrend.cumulative.map(p => p.date),
+          cumulative: myTrend.cumulative.map(p => p.value),
+          winRate20: myTrend.winRate20.map(p => p.value),
+        }
+      });
+      return;
+    }
+
+    // scope === 'all': 전체 유저 기록 보유자 + 상위 3명 비교
+    const allRows = await db.getAllGameResults(mode);
+    const allUsers = await db.getAllUsers();
+    const userMap = new Map(allUsers.map(u => [u.userCode, u]));
+
+    const byUser = new Map();
+    for (const r of allRows) {
+      if (!byUser.has(r.userCode)) byUser.set(r.userCode, []);
+      byUser.get(r.userCode).push(r);
+    }
+
+    let globalMaxGain = null, globalMaxLoss = null, globalMaxWin = null, globalMaxLose = null;
+    for (const [userCode, rows] of byUser) {
+      const u = userMap.get(userCode);
+      if (!u) continue;
+      const mm = statsUtils.computeMaxMinPointChange(rows);
+      const st = statsUtils.computeStreaks(rows);
+      if (mm.maxGain && (!globalMaxGain || mm.maxGain.value > globalMaxGain.value)) {
+        globalMaxGain = { ...mm.maxGain, userCode, userName: u.userName, avatar: u.avatar };
+      }
+      if (mm.maxLoss && (!globalMaxLoss || mm.maxLoss.value < globalMaxLoss.value)) {
+        globalMaxLoss = { ...mm.maxLoss, userCode, userName: u.userName, avatar: u.avatar };
+      }
+      if (st.maxWinStreak.count > 0 && (!globalMaxWin || st.maxWinStreak.count > globalMaxWin.count)) {
+        globalMaxWin = { ...st.maxWinStreak, userCode, userName: u.userName, avatar: u.avatar };
+      }
+      if (st.maxLoseStreak.count > 0 && (!globalMaxLose || st.maxLoseStreak.count > globalMaxLose.count)) {
+        globalMaxLose = { ...st.maxLoseStreak, userCode, userName: u.userName, avatar: u.avatar };
+      }
+    }
+
+    // 상위 3명 고정 비교 — 내가 그 안에 있으면 필터에서 자연스럽게 빠져 "나"+2명=3줄, 없으면 "나"+3명=4줄
+    const rankingRows = mode === 'multi' ? await db.getMultiRanking() : await db.getSingleRanking();
+    const top3 = rankingRows.slice(0, 3);
+    const dateKeys = myTrend.cumulative.map(p => p.date);
+
+    function seriesFor(rows) {
+      const dailyMap = statsUtils.buildDailySeries(rows);
+      return {
+        cumulative: statsUtils.alignSeriesToDates(dailyMap, dateKeys, 'cumulative').map(p => p.value),
+        winRate20: statsUtils.alignSeriesToDates(dailyMap, dateKeys, 'winRate20').map(p => p.value),
+      };
+    }
+
+    const others = top3
+      .filter(r => r.userCode !== sess.userCode)
+      .map(r => {
+        const rank = rankingRows.findIndex(row => row.userCode === r.userCode) + 1;
+        return { userCode: r.userCode, userName: r.userName, avatar: r.avatar, rank, ...seriesFor(byUser.get(r.userCode) || []) };
+      });
+
+    const myRankIdx = rankingRows.findIndex(r => r.userCode === sess.userCode);
+    const myRank = myRankIdx >= 0 ? myRankIdx + 1 : null;
+
+    socket.emit('myStats', {
+      mode, scope, period, myRank,
+      records: { maxGain: globalMaxGain, maxLoss: globalMaxLoss, maxWinStreak: globalMaxWin, maxLoseStreak: globalMaxLose },
+      trend: {
+        dates: dateKeys,
+        me: { cumulative: myTrend.cumulative.map(p => p.value), winRate20: myTrend.winRate20.map(p => p.value) },
+        others
+      }
     });
   });
 

@@ -1137,7 +1137,7 @@ document.getElementById('btn-results-again').onclick = () => {
   myFixedSeat = null;
   lastTurnPlayerCode = null;
   if (gameMode === 'single') {
-    socket.emit('startSingle');
+    socket.emit('startSingle', { continued: true });
   } else {
     socket.emit('playAgain'); // 관리자가 누르면 같은 멤버로 재시작
   }

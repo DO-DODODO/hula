@@ -49,9 +49,13 @@ async function init() {
       cardSum INTEGER NOT NULL,
       pointChange INTEGER NOT NULL,
       didRegister INTEGER DEFAULT 0,
+      continuedFromPrevious INTEGER DEFAULT NULL,
       playedAt INTEGER DEFAULT (strftime('%s','now'))
     )
   `);
+  try {
+    await db.query(sql`ALTER TABLE game_results ADD COLUMN continuedFromPrevious INTEGER DEFAULT NULL`);
+  } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
 
   await db.query(sql`
     CREATE TABLE IF NOT EXISTS settings (
@@ -97,12 +101,12 @@ async function setSetting(key, value) {
   await db.query(sql`INSERT OR REPLACE INTO settings (key, value) VALUES (${key}, ${value})`);
 }
 
-async function saveGameResult(gameId, mode, results, isHula = false) {
+async function saveGameResult(gameId, mode, results, isHula = false, continuedFromPrevious = null) {
   for (const r of results) {
     if (r.isAI) continue;
     await db.query(sql`
-      INSERT INTO game_results (gameId, mode, userCode, rank, cardSum, pointChange, didRegister)
-      VALUES (${gameId}, ${mode}, ${r.userCode}, ${r.rank}, ${r.cardSum}, ${r.pointChange}, ${r.didRegister ? 1 : 0})
+      INSERT INTO game_results (gameId, mode, userCode, rank, cardSum, pointChange, didRegister, continuedFromPrevious)
+      VALUES (${gameId}, ${mode}, ${r.userCode}, ${r.rank}, ${r.cardSum}, ${r.pointChange}, ${r.didRegister ? 1 : 0}, ${continuedFromPrevious === null ? null : (continuedFromPrevious ? 1 : 0)})
     `);
     const isHulaWinner = isHula && r.rank === 1;
     if (mode === 'multi') {
@@ -125,6 +129,24 @@ async function saveGameResult(gameId, mode, results, isHula = false) {
       `);
     }
   }
+}
+
+async function getGameResultsForUser(userCode, mode) {
+  return db.query(sql`
+    SELECT pointChange, rank, playedAt, continuedFromPrevious
+    FROM game_results
+    WHERE userCode = ${userCode} AND mode = ${mode}
+    ORDER BY playedAt ASC
+  `);
+}
+
+async function getAllGameResults(mode) {
+  return db.query(sql`
+    SELECT userCode, pointChange, rank, playedAt, continuedFromPrevious
+    FROM game_results
+    WHERE mode = ${mode}
+    ORDER BY userCode ASC, playedAt ASC
+  `);
 }
 
 async function getUserCount() {
@@ -191,5 +213,6 @@ async function chargeBalance(userCode, mode) {
 module.exports = {
   init, getUser, createUser, updateUser, getAllUsers, deleteUser,
   getSetting, setSetting, saveGameResult,
-  getMultiRanking, getSingleRanking, getHulaRanking, chargeBalance, getUserCount
+  getMultiRanking, getSingleRanking, getHulaRanking, chargeBalance, getUserCount,
+  getGameResultsForUser, getAllGameResults
 };

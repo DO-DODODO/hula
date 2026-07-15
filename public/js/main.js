@@ -425,6 +425,234 @@ function renderRanking(mode) {
   });
 }
 
+// ── My Stats ───────────────────────────────────────────────────────────
+let mystatsScope = 'me';
+let mystatsMode = 'single';
+let mystatsPeriod = 'month';
+let mystatsMetric = 'value';
+let mystatsData = null;
+
+document.getElementById('btn-mystats').onclick = () => {
+  mystatsScope = 'me'; mystatsMode = 'single'; mystatsPeriod = 'month'; mystatsMetric = 'value';
+  msSyncTabs();
+  msFetch();
+  showScreen('screen-mystats');
+};
+document.getElementById('btn-back-mystats').onclick = () => showScreen('screen-main');
+document.getElementById('mystats-tab-me').onclick = () => { mystatsScope = 'me'; msSyncTabs(); msFetch(); };
+document.getElementById('mystats-tab-all').onclick = () => { mystatsScope = 'all'; msSyncTabs(); msFetch(); };
+document.getElementById('mystats-mode-single').onclick = () => { mystatsMode = 'single'; msSyncTabs(); msFetch(); };
+document.getElementById('mystats-mode-multi').onclick = () => { mystatsMode = 'multi'; msSyncTabs(); msFetch(); };
+
+function msSyncTabs() {
+  document.getElementById('mystats-tab-me').classList.toggle('active', mystatsScope === 'me');
+  document.getElementById('mystats-tab-all').classList.toggle('active', mystatsScope === 'all');
+  document.getElementById('mystats-mode-single').classList.toggle('active', mystatsMode === 'single');
+  document.getElementById('mystats-mode-multi').classList.toggle('active', mystatsMode === 'multi');
+}
+
+function msFetch() {
+  document.getElementById('mystats-content').innerHTML = '<p class="ms-empty-msg">불러오는 중...</p>';
+  socket.emit('getMyStats', { mode: mystatsMode, scope: mystatsScope, period: mystatsPeriod });
+}
+
+function msSetPeriod(period) {
+  mystatsPeriod = period;
+  msFetch();
+}
+
+function msToggleMetric() {
+  mystatsMetric = mystatsMetric === 'value' ? 'winrate' : 'value';
+  renderMyStats();
+}
+
+socket.on('myStats', (data) => {
+  mystatsData = data;
+  renderMyStats();
+});
+
+const MS_WEEKDAY_KR = ['일', '월', '화', '수', '목', '금', '토'];
+function msFormatCardDate(unixSec) {
+  if (unixSec == null) return '-';
+  const d = new Date(unixSec * 1000);
+  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} (${MS_WEEKDAY_KR[d.getDay()]})`;
+}
+function msFormatAxisDate(dateKey) {
+  if (!dateKey) return '';
+  const [, m, d] = dateKey.split('-');
+  return `${parseInt(m, 10)}/${parseInt(d, 10)}`;
+}
+function msFormatValue(v, mode, metric) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '-';
+  if (metric === 'winrate') return v.toFixed(1) + '%';
+  return mode === 'multi' ? '₩' + Math.round(v).toLocaleString() : Math.round(v).toLocaleString() + '점';
+}
+function msFormatSigned(v, mode) {
+  if (v === null || v === undefined) return '-';
+  const abs = Math.abs(v);
+  const sign = v >= 0 ? '+' : '-';
+  return mode === 'multi' ? `${sign}₩${abs.toLocaleString()}` : `${sign}${abs.toLocaleString()}점`;
+}
+function msAvatarEmoji(avatar) {
+  return (AVATARS.find(a => a.key === avatar) || AVATARS[0]).emoji;
+}
+
+function msPointsFor(values, min, max) {
+  const n = values.length;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const v = values[i];
+    if (v === null || v === undefined) continue;
+    const x = n <= 1 ? 0 : (i / (n - 1)) * 300;
+    const y = max === min ? 50 : 100 - ((v - min) / (max - min)) * 100;
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  return pts;
+}
+function msPolyline(values, min, max, color, width) {
+  const pts = msPointsFor(values, min, max);
+  if (pts.length === 0) return '';
+  let html = `<polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const last = pts[pts.length - 1].split(',');
+  html += `<circle cx="${last[0]}" cy="${last[1]}" r="4" fill="${color}" stroke="#134d2b" stroke-width="2"/>`;
+  return html;
+}
+
+function msRenderMeCards(summary) {
+  const mode = mystatsMode;
+  const { maxGain, maxLoss, maxWinStreak: win, maxLoseStreak: lose } = summary;
+  const cell = (label, color, body) => `<div class="ms-card"><div class="ic-lb"><span style="color:${color}">${label}</span></div>${body}</div>`;
+  return (
+    cell('▲ 한 판 최고 획득', '#7fd88f', maxGain
+      ? `<div class="val pos">${msFormatSigned(maxGain.value, mode)}</div><div class="date">${msFormatCardDate(maxGain.playedAt)}</div>`
+      : '<div class="empty">기록 없음</div>') +
+    cell('▼ 한 판 최대 손실', '#e08f8f', maxLoss
+      ? `<div class="val neg">${msFormatSigned(maxLoss.value, mode)}</div><div class="date">${msFormatCardDate(maxLoss.playedAt)}</div>`
+      : '<div class="empty">기록 없음</div>') +
+    `<div class="ms-card"><div class="ic-lb">🔥 최다 연승</div>${win.count > 0
+      ? `<div class="val" style="color:var(--gold)">${win.count}연승</div><div class="date">${msFormatCardDate(win.playedAt)}</div>`
+      : '<div class="empty">기록 없음</div>'}</div>` +
+    `<div class="ms-card"><div class="ic-lb">💧 최다 연패</div>${lose.count > 0
+      ? `<div class="val" style="color:var(--text-dim)">${lose.count}연패</div><div class="date">${msFormatCardDate(lose.playedAt)}</div>`
+      : '<div class="empty">기록 없음</div>'}</div>`
+  );
+}
+
+function msRenderAllCards(records) {
+  const mode = mystatsMode;
+  const holder = (rec, valFn) => rec
+    ? `<div class="holder"><span class="holder-av">${msAvatarEmoji(rec.avatar)}</span><span class="holder-name">${rec.userName}</span></div>
+       ${valFn(rec)}<div class="date">${msFormatCardDate(rec.playedAt)}</div>`
+    : '<div class="empty">기록 없음</div>';
+  return (
+    `<div class="ms-card"><div class="ic-lb"><span style="color:#7fd88f">▲ 최고 획득자</span></div>${holder(records.maxGain, r => `<div class="val pos">${msFormatSigned(r.value, mode)}</div>`)}</div>` +
+    `<div class="ms-card"><div class="ic-lb"><span style="color:#e08f8f">▼ 최고 손실자</span></div>${holder(records.maxLoss, r => `<div class="val neg">${msFormatSigned(r.value, mode)}</div>`)}</div>` +
+    `<div class="ms-card"><div class="ic-lb">🔥 최다연승자</div>${holder(records.maxWinStreak, r => `<div class="val" style="color:var(--gold)">${r.count}연승</div>`)}</div>` +
+    `<div class="ms-card"><div class="ic-lb">💧 최다연패자</div>${holder(records.maxLoseStreak, r => `<div class="val" style="color:var(--text-dim)">${r.count}연패</div>`)}</div>`
+  );
+}
+
+const MS_RANK_COLORS = ['#e08fa0', '#6fc9b8', '#e0a05f'];
+
+function msRenderRankLegend(d, meColor) {
+  const all = [
+    { isMe: true, rank: d.myRank, userName: me?.userName || '나', color: meColor },
+    ...d.trend.others.map((o, i) => ({ isMe: false, rank: o.rank, userName: o.userName, color: MS_RANK_COLORS[i % MS_RANK_COLORS.length] })),
+  ];
+  all.sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
+  const badge = rank => rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : (rank ?? '-');
+  const items = all.map(item => `<div class="ms-rlg-item${item.isMe ? ' me' : ''}">
+    <span class="badge">${badge(item.rank)}</span>
+    <span class="swatch" style="background:${item.color}"></span>
+    ${item.userName}${item.isMe ? '<span class="nm-tag">나</span>' : ''}
+  </div>`).join('');
+  return `<div class="ms-rank-legend">${items}</div>`;
+}
+
+function renderMyStats() {
+  const el = document.getElementById('mystats-content');
+  const d = mystatsData;
+  if (!d || d.scope !== mystatsScope || d.mode !== mystatsMode || d.period !== mystatsPeriod) return;
+
+  const mode = mystatsMode;
+  const meColor = mode === 'multi' ? '#8fb8e0' : 'var(--gold)';
+  const cardsHtml = d.scope === 'me' ? msRenderMeCards(d.summary) : msRenderAllCards(d.records);
+
+  const meValues = mystatsMetric === 'value'
+    ? (d.scope === 'me' ? d.trend.cumulative : d.trend.me.cumulative)
+    : (d.scope === 'me' ? d.trend.winRate20 : d.trend.me.winRate20);
+
+  const series = [{ values: meValues, color: meColor, width: d.scope === 'all' ? 3 : 2.4 }];
+  if (d.scope === 'all') {
+    d.trend.others.forEach((o, i) => {
+      const v = mystatsMetric === 'value' ? o.cumulative : o.winRate20;
+      series.push({ values: v, color: MS_RANK_COLORS[i % MS_RANK_COLORS.length], width: 2.1 });
+    });
+  }
+
+  const nonNull = series.flatMap(s => s.values.filter(v => v !== null && v !== undefined));
+  let min = 0, max = 1;
+  if (nonNull.length) {
+    min = Math.min(...nonNull); max = Math.max(...nonNull);
+    if (min === max) { min -= 1; max += 1; }
+    const pad = (max - min) * 0.1;
+    min -= pad; max += pad;
+  }
+
+  // scope=all일 땐 "나" 라인을 맨 마지막(맨 위)에 그려서 다른 라인에 안 가리게
+  const drawOrder = d.scope === 'all' ? [...series.slice(1), series[0]] : series;
+  const svgLines = drawOrder.map(s => msPolyline(s.values, min, max, s.color, s.width)).join('');
+
+  let baselineHtml = '';
+  if (mystatsMetric === 'winrate' && max > 50 && min < 50) {
+    const y = (100 - ((50 - min) / (max - min)) * 100).toFixed(1);
+    baselineHtml = `<line x1="0" y1="${y}" x2="300" y2="${y}" stroke="rgba(255,255,255,0.18)" stroke-width="1" stroke-dasharray="3,4"/>`;
+  }
+
+  const dates = d.trend.dates;
+  const xAxisHtml = `<div class="ms-x-axis"><span>${msFormatAxisDate(dates[0])}</span><span>${msFormatAxisDate(dates[Math.floor(dates.length / 2)])}</span><span>오늘</span></div>`;
+
+  const metricLabel = mystatsMetric === 'value' ? (mode === 'multi' ? '잔액 추이' : '포인트 추이') : '승률 추이';
+  const periodLabel = mystatsPeriod === 'week' ? '최근 1주' : mystatsPeriod === 'month' ? '최근 1달' : '전체';
+  const nowValue = meValues.length ? meValues[meValues.length - 1] : null;
+  const headRightHtml = d.scope === 'me'
+    ? `<div class="ms-chart-now" style="color:${meColor}">${msFormatValue(nowValue, mode, mystatsMetric)}</div>`
+    : `<div class="ms-rank-pill">${d.myRank ? d.myRank + '위' : '순위 없음'}</div>`;
+  const legendHtml = d.scope === 'all' ? msRenderRankLegend(d, meColor) : '';
+  const subLabel = d.scope === 'all' ? '상위 3명 비교' : (mystatsMetric === 'winrate' ? '20판 이동평균' : '누적 값');
+
+  el.innerHTML = `
+    <div class="ms-stat-grid">${cardsHtml}</div>
+    <div class="ms-chart-card">
+      <div class="ms-chart-head">
+        <div class="ms-chip" id="mystats-metric-chip">${metricLabel} <span class="care">▾</span></div>
+        ${headRightHtml}
+      </div>
+      <div class="ms-chart-sub">${periodLabel} · ${subLabel}</div>
+      <div class="ms-chart-plot">
+        <div class="ms-y-axis" style="height:100px">
+          <span>${msFormatValue(max, mode, mystatsMetric)}</span>
+          <span>${msFormatValue((min + max) / 2, mode, mystatsMetric)}</span>
+          <span>${msFormatValue(min, mode, mystatsMetric)}</span>
+        </div>
+        <svg viewBox="0 0 300 100" width="100%" height="100" style="overflow:visible">${baselineHtml}${svgLines}</svg>
+      </div>
+      ${xAxisHtml}
+      ${legendHtml}
+      <div class="ms-chart-range">
+        <button class="ms-range-pill${mystatsPeriod === 'week' ? ' active' : ''}" data-period="week">최근 1주</button>
+        <button class="ms-range-pill${mystatsPeriod === 'month' ? ' active' : ''}" data-period="month">최근 1달</button>
+        <button class="ms-range-pill${mystatsPeriod === 'all' ? ' active' : ''}" data-period="all">전체</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('mystats-metric-chip').onclick = msToggleMetric;
+  el.querySelectorAll('.ms-range-pill').forEach(btn => {
+    btn.onclick = () => msSetPeriod(btn.dataset.period);
+  });
+}
+
 // ── Help ───────────────────────────────────────────────────────────────
 document.getElementById('btn-help').onclick = () => showScreen('screen-help');
 document.getElementById('btn-back-help').onclick = () => showScreen('screen-main');
