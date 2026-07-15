@@ -1316,7 +1316,7 @@ io.on('connection', (socket) => {
         trend: {
           dates: myTrend.cumulative.map(p => p.date),
           cumulative: myCumulativeAnchored.map(p => p.value),
-          winRate20: myTrend.winRate20.map(p => p.value),
+          winRate: myTrend.winRate.map(p => p.value),
         }
       });
       return;
@@ -1370,7 +1370,7 @@ io.on('connection', (socket) => {
       const cumAnchored = statsUtils.anchorToActualBalance(cumPoints, actualBalance);
       return {
         cumulative: cumAnchored.map(p => p.value),
-        winRate20: statsUtils.alignSeriesToDates(dailyMap, dateKeys, 'winRate20').map(p => p.value),
+        winRate: statsUtils.alignSeriesToDates(dailyMap, dateKeys, 'winRate').map(p => p.value),
       };
     }
 
@@ -1393,7 +1393,7 @@ io.on('connection', (socket) => {
       },
       trend: {
         dates: dateKeys,
-        me: { cumulative: myCumulativeAnchored.map(p => p.value), winRate20: myTrend.winRate20.map(p => p.value) },
+        me: { cumulative: myCumulativeAnchored.map(p => p.value), winRate: myTrend.winRate.map(p => p.value) },
         others
       }
     });

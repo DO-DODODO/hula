@@ -61,13 +61,12 @@ function dayKeyKST(playedAtSec) {
 function buildDailySeries(rows) {
   const map = new Map();
   let cumulative = 0;
+  let winsSoFar = 0;
   for (let i = 0; i < rows.length; i++) {
     cumulative += rows[i].pointChange;
-    const start = Math.max(0, i - 19);
-    const window = rows.slice(start, i + 1);
-    const wins = window.filter(w => w.rank === 1).length;
-    const winRate20 = Math.floor((wins / window.length) * 1000) / 10;
-    map.set(dayKeyKST(rows[i].playedAt), { cumulative, winRate20 });
+    if (rows[i].rank === 1) winsSoFar++;
+    const winRate = Math.floor((winsSoFar / (i + 1)) * 1000) / 10;
+    map.set(dayKeyKST(rows[i].playedAt), { cumulative, winRate });
   }
   return map;
 }
@@ -116,7 +115,7 @@ function buildTrendSeries(rows, period) {
   const dateKeys = getDateRangeKeys(period, firstDayKey);
   return {
     cumulative: alignSeriesToDates(dailyMap, dateKeys, 'cumulative'),
-    winRate20: alignSeriesToDates(dailyMap, dateKeys, 'winRate20'),
+    winRate: alignSeriesToDates(dailyMap, dateKeys, 'winRate'),
   };
 }
 

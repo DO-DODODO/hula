@@ -602,12 +602,12 @@ function renderMyStats() {
 
   const meValues = mystatsMetric === 'value'
     ? (d.scope === 'me' ? d.trend.cumulative : d.trend.me.cumulative)
-    : (d.scope === 'me' ? d.trend.winRate20 : d.trend.me.winRate20);
+    : (d.scope === 'me' ? d.trend.winRate : d.trend.me.winRate);
 
   const series = [{ values: meValues, color: meColor, width: d.scope === 'all' ? 3 : 2.4 }];
   if (d.scope === 'all') {
     d.trend.others.forEach((o, i) => {
-      const v = mystatsMetric === 'value' ? o.cumulative : o.winRate20;
+      const v = mystatsMetric === 'value' ? o.cumulative : o.winRate;
       series.push({ values: v, color: MS_RANK_COLORS[i % MS_RANK_COLORS.length], width: 2.1 });
     });
   }
@@ -644,7 +644,7 @@ function renderMyStats() {
     ? `<div class="ms-chart-now" style="color:${meColor}">${msFormatValue(nowValue, mode, mystatsMetric)}</div>`
     : `<div class="ms-rank-pill">${d.myRank ? d.myRank + '위' : '순위 없음'}</div>`;
   const legendHtml = d.scope === 'all' ? msRenderRankLegend(d, meColor) : '';
-  const subLabel = d.scope === 'all' ? '상위 3명 비교' : (mystatsMetric === 'winrate' ? '20판 이동평균' : '누적 값');
+  const subLabel = d.scope === 'all' ? '상위 3명 비교' : (mystatsMetric === 'winrate' ? '통산 승률' : '누적 값');
 
   el.innerHTML = `
     <div class="ms-stat-grid">${cardsHtml}</div>
