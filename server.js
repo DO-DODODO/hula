@@ -1300,10 +1300,14 @@ io.on('connection', (socket) => {
     scope = scope === 'all' ? 'all' : 'me';
     period = ['week', 'month', 'all'].includes(period) ? period : 'month';
 
+    const myUser = await db.getUser(sess.userCode);
+    const myActualBalance = mode === 'multi' ? (myUser?.multiBalance ?? 0) : (myUser?.singlePoints ?? 0);
+
     const myRows = await db.getGameResultsForUser(sess.userCode, mode);
     const { maxGain, maxLoss } = statsUtils.computeMaxMinPointChange(myRows);
     const { maxWinStreak, maxLoseStreak } = statsUtils.computeStreaks(myRows);
     const myTrend = statsUtils.buildTrendSeries(myRows, period);
+    const myCumulativeAnchored = statsUtils.anchorToActualBalance(myTrend.cumulative, myActualBalance);
 
     if (scope === 'me') {
       socket.emit('myStats', {
@@ -1311,7 +1315,7 @@ io.on('connection', (socket) => {
         summary: { maxGain, maxLoss, maxWinStreak, maxLoseStreak },
         trend: {
           dates: myTrend.cumulative.map(p => p.date),
-          cumulative: myTrend.cumulative.map(p => p.value),
+          cumulative: myCumulativeAnchored.map(p => p.value),
           winRate20: myTrend.winRate20.map(p => p.value),
         }
       });
@@ -1354,10 +1358,12 @@ io.on('connection', (socket) => {
     const top3 = rankingRows.slice(0, 3);
     const dateKeys = myTrend.cumulative.map(p => p.date);
 
-    function seriesFor(rows) {
+    function seriesFor(rows, actualBalance) {
       const dailyMap = statsUtils.buildDailySeries(rows);
+      const cumPoints = statsUtils.alignSeriesToDates(dailyMap, dateKeys, 'cumulative');
+      const cumAnchored = statsUtils.anchorToActualBalance(cumPoints, actualBalance);
       return {
-        cumulative: statsUtils.alignSeriesToDates(dailyMap, dateKeys, 'cumulative').map(p => p.value),
+        cumulative: cumAnchored.map(p => p.value),
         winRate20: statsUtils.alignSeriesToDates(dailyMap, dateKeys, 'winRate20').map(p => p.value),
       };
     }
@@ -1366,7 +1372,8 @@ io.on('connection', (socket) => {
       .filter(r => r.userCode !== sess.userCode)
       .map(r => {
         const rank = rankingRows.findIndex(row => row.userCode === r.userCode) + 1;
-        return { userCode: r.userCode, userName: r.userName, avatar: r.avatar, rank, ...seriesFor(byUser.get(r.userCode) || []) };
+        const actualBalance = mode === 'multi' ? r.multiBalance : r.singlePoints;
+        return { userCode: r.userCode, userName: r.userName, avatar: r.avatar, rank, ...seriesFor(byUser.get(r.userCode) || [], actualBalance) };
       });
 
     const myRankIdx = rankingRows.findIndex(r => r.userCode === sess.userCode);
@@ -1377,7 +1384,7 @@ io.on('connection', (socket) => {
       records: { maxGain: globalMaxGain, maxLoss: globalMaxLoss, maxWinStreak: globalMaxWin, maxLoseStreak: globalMaxLose },
       trend: {
         dates: dateKeys,
-        me: { cumulative: myTrend.cumulative.map(p => p.value), winRate20: myTrend.winRate20.map(p => p.value) },
+        me: { cumulative: myCumulativeAnchored.map(p => p.value), winRate20: myTrend.winRate20.map(p => p.value) },
         others
       }
     });

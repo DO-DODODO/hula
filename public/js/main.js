@@ -597,6 +597,9 @@ function renderMyStats() {
     if (min === max) { min -= 1; max += 1; }
     const pad = (max - min) * 0.1;
     min -= pad; max += pad;
+    if (mystatsMetric === 'winrate') { min = Math.max(0, min); max = Math.min(100, max); }
+  } else if (mystatsMetric === 'winrate') {
+    min = 0; max = 100;
   }
 
   // scope=all일 땐 "나" 라인을 맨 마지막(맨 위)에 그려서 다른 라인에 안 가리게
@@ -635,7 +638,7 @@ function renderMyStats() {
           <span>${msFormatValue((min + max) / 2, mode, mystatsMetric)}</span>
           <span>${msFormatValue(min, mode, mystatsMetric)}</span>
         </div>
-        <svg viewBox="0 0 300 100" width="100%" height="100" style="overflow:visible">${baselineHtml}${svgLines}</svg>
+        <svg viewBox="0 0 300 100" preserveAspectRatio="none" style="display:block;width:100%;height:100px;overflow:visible">${baselineHtml}${svgLines}</svg>
       </div>
       ${xAxisHtml}
       ${legendHtml}

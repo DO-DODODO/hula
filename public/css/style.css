@@ -232,6 +232,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .ms-chart-sub { font-size: 9.5px; color: var(--text-dim); margin-bottom: 2px; }
 
 .ms-chart-plot { display: flex; gap: 6px; }
+.ms-chart-plot svg { flex: 1 1 0; min-width: 0; }
 .ms-y-axis { display: flex; flex-direction: column; justify-content: space-between; padding: 2px 0; flex-shrink: 0; }
 .ms-y-axis span { font-size: 8.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ms-x-axis { display: flex; justify-content: space-between; margin-top: 3px; padding-left: 34px; }

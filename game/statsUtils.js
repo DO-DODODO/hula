@@ -120,9 +120,21 @@ function buildTrendSeries(rows, period) {
   };
 }
 
+// game_results의 pointChange 합만으로는 가입 시 기본 지급액/충전(chargeBalance)이 반영 안 되므로,
+// 실제 현재 보유액(users 테이블)에 맞춰 시리즈 전체를 평행이동시켜 보정
+function anchorToActualBalance(points, actualCurrent) {
+  let lastVal = null;
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].value !== null && points[i].value !== undefined) { lastVal = points[i].value; break; }
+  }
+  if (lastVal === null) return points.map(p => ({ ...p, value: p.value === null ? null : actualCurrent }));
+  const offset = actualCurrent - lastVal;
+  return points.map(p => ({ ...p, value: (p.value === null || p.value === undefined) ? null : p.value + offset }));
+}
+
 module.exports = {
   SESSION_GAP_SEC, isSameSession,
   computeMaxMinPointChange, computeStreaks,
   dayKeyKST, todayKeyKST, buildDailySeries, getDateRangeKeys, alignSeriesToDates,
-  buildTrendSeries,
+  buildTrendSeries, anchorToActualBalance,
 };
