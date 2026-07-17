@@ -104,11 +104,11 @@ socket.on('loginSuccess', () => {
   // Multi: server sends gameState automatically
 });
 
-if (isAdmin || gameMode === 'single') {
+document.getElementById('btn-admin-stop').onclick = () => {
+  if (confirm('게임을 중단하시겠습니까?')) socket.emit('adminStopGame');
+};
+if (gameMode === 'single') {
   document.getElementById('admin-controls').style.display = '';
-  document.getElementById('btn-admin-stop').onclick = () => {
-    if (confirm('게임을 중단하시겠습니까?')) socket.emit('adminStopGame');
-  };
 }
 
 // 일시정지: 싱글모드에서만 노출
@@ -121,6 +121,9 @@ if (gameMode === 'single') {
 // ── Game State ─────────────────────────────────────────────────────────
 socket.on('gameState', (state) => {
   requestWakeLock();
+  if (gameMode === 'multi') {
+    document.getElementById('admin-controls').style.display = (state.hostCode === userCode) ? '' : 'none';
+  }
   // 새 게임 시작 시 결과 화면 숨기기 + 카드 배분 애니메이션
   if (!gameState || state.id !== gameState.id) {
     document.getElementById('overlay-gameend').style.display = 'none';
@@ -1100,7 +1103,7 @@ function updateReadyUI() {
     return;
   }
 
-  if (isAdmin) {
+  if (gameState?.hostCode === userCode) {
     readyBtn.style.display = 'none';
     again.style.display = '';
     if (!readyStatusData || readyStatusData.requiredCodes.length === 0) {
@@ -1115,7 +1118,7 @@ function updateReadyUI() {
   } else {
     again.style.display = 'none';
     readyBtn.style.display = '';
-    const amReady = !!readyStatusData?.readyCodes.includes(userCode);
+    const amReady = !!readyStatusData?.readyCodes?.includes(userCode);
     readyBtn.textContent = amReady ? '준비완료' : '준비';
     readyBtn.disabled = amReady;
     readyBtn.classList.toggle('done', amReady);

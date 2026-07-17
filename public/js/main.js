@@ -49,9 +49,9 @@ socket.on('loginSuccess', (user) => {
   setCookie('isAdmin', user.isAdmin ? '1' : '0');
   updateMainScreen();
   showScreen('screen-main');
-  if (sessionStorage.getItem('autoJoinWaiting') === '1') {
-    sessionStorage.removeItem('autoJoinWaiting');
-    socket.emit('joinWaitingViaInvite');
+  if (sessionStorage.getItem('autoJoinRoom') === '1') {
+    sessionStorage.removeItem('autoJoinRoom');
+    socket.emit('joinRoomViaInvite');
   }
 });
 socket.on('loginError', (msg) => {
@@ -100,41 +100,202 @@ document.getElementById('btn-single').onclick = () => {
 
 // ── Multi Mode ─────────────────────────────────────────────────────────
 document.getElementById('btn-multi').onclick = () => {
-  showScreen('screen-multi-entry');
+  socket.emit('joinMulti');
 };
-document.getElementById('btn-back-multi').onclick = () => showScreen('screen-main');
-function submitEntryCode() {
-  const code = document.getElementById('input-entrycode').value.trim();
-  if (!code) return;
-  socket.emit('joinMulti', { entryCode: code });
-}
-document.getElementById('btn-enter-multi').onclick = submitEntryCode;
-document.getElementById('input-entrycode').onkeydown = e => { if (e.key === 'Enter') submitEntryCode(); };
 
 let inWaitingRoom = false;
-socket.on('joinMultiOk', () => {
-  inWaitingRoom = true;
-  showScreen('screen-waiting');
-  if (isAdmin) {
-    document.getElementById('admin-start-area').style.display = '';
-  }
+let currentRoomId = null;
+
+socket.on('joinMultiOk', ({ roomId } = {}) => {
+  document.getElementById('room-code-error').textContent = '';
+  document.getElementById('modal-room-code').style.display = 'none';
+  if (!roomId) enterLobby();
+  // roomId가 있으면 곧이어 오는 roomWaiting 이벤트가 화면 전환을 담당
 });
 socket.on('joinMultiError', (msg) => {
-  document.getElementById('entry-error').textContent = msg;
+  toast(msg);
+  document.getElementById('room-code-error').textContent = msg;
 });
 
-socket.on('waitingRoom', ({ players }) => {
-  const el = document.getElementById('waiting-players');
-  el.innerHTML = players.map(p =>
-    `<div class="waiting-player">${nameWithBadges(p)}${p.isAdmin ? ' (관리자)' : ''}</div>`
-  ).join('');
+// 방에 있는 도중 방 자체가 없어졌을 때(누군가 나가서 인원이 부족해짐)
+socket.on('roomClosed', ({ reason }) => {
+  if (!inWaitingRoom) return;
+  toast(reason || '방이 사라졌어요');
+  enterLobby();
 });
 
-document.getElementById('btn-admin-start').onclick = () => {
-  socket.emit('adminStartGame');
+// ── 멀티 로비 (방 목록) ──────────────────────────────────────────────────
+function enterLobby() {
+  inWaitingRoom = false;
+  currentRoomId = null;
+  socket.emit('listRooms');
+  socket.emit('getRanking'); // 초대 대상 목록(온라인 유저) 확보용
+  showScreen('screen-multi-lobby');
+}
+document.getElementById('btn-back-lobby').onclick = () => showScreen('screen-main');
+
+socket.on('roomList', ({ rooms }) => renderRoomList(rooms));
+function renderRoomList(rooms) {
+  const el = document.getElementById('room-list');
+  if (!rooms.length) { el.innerHTML = '<div class="empty-rooms">열린 방이 없어요, 방을 만들어보세요</div>'; return; }
+  el.innerHTML = rooms.map(r => `
+    <div class="room-row${(r.memberCount >= 4 || r.playing) ? ' full' : ''}" data-roomid="${r.id}">
+      <span class="lock">${r.locked ? '🔒' : ''}</span>
+      <span class="rname">${r.title}</span>
+      <span class="rcount">${r.playing ? '게임 중' : r.memberCount + '/4'}</span>
+    </div>
+  `).join('');
+  el.querySelectorAll('.room-row').forEach(row => {
+    row.onclick = () => {
+      if (row.classList.contains('full')) return;
+      socket.emit('joinRoomByList', { roomId: row.dataset.roomid });
+    };
+  });
+}
+
+let pendingJoinRoomId = null;
+socket.on('joinRoomNeedsCode', ({ roomId, title }) => {
+  pendingJoinRoomId = roomId;
+  document.getElementById('room-code-title').textContent = `"${title}" 코드 입력`;
+  document.getElementById('input-join-room-code').value = '';
+  document.getElementById('room-code-error').textContent = '';
+  document.getElementById('modal-room-code').style.display = 'flex';
+});
+document.getElementById('btn-submit-room-code').onclick = () => {
+  const code = document.getElementById('input-join-room-code').value.trim();
+  socket.emit('joinRoomByList', { roomId: pendingJoinRoomId, code });
+};
+document.getElementById('btn-cancel-room-code').onclick = () => {
+  document.getElementById('modal-room-code').style.display = 'none';
+};
+
+// ── 초대 대상 선택 (랭킹 데이터의 online 정보 재사용) ─────────────────────
+function getInvitableUsers() {
+  if (!rankingData) return [];
+  return (rankingData.single || []).filter(r => me && r.userCode !== me.userCode && r.online);
+}
+function badgesForUser(userCode) {
+  return {
+    isRank1Single: rankingData?.single?.[0]?.userCode === userCode,
+    isRank1Multi: rankingData?.multi?.[0]?.userCode === userCode,
+    isHulaKing: !!(rankingData?.single || []).find(r => r.userCode === userCode)?.isHulaKing,
+  };
+}
+function inviteRowLabel(u) {
+  const avatarEmoji = (AVATARS.find(a => a.key === u.avatar) || AVATARS[0]).emoji;
+  return `<span class="pav">${avatarEmoji}</span><span class="nm">${nameWithBadges(badgesForUser(u.userCode), u.userName)}</span>`;
+}
+// 체크박스 다중선택(최대 3명) - 방 만들기용
+function renderInvitePicker(containerId) {
+  const el = document.getElementById(containerId);
+  const users = getInvitableUsers();
+  if (!users.length) { el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:6px 2px">초대 가능한 접속중 유저가 없어요</div>'; return; }
+  el.innerHTML = users.map(u => `
+    <div class="invite-pick-row" data-usercode="${u.userCode}"><span class="chk">&nbsp;</span>${inviteRowLabel(u)}</div>
+  `).join('');
+  el.querySelectorAll('.invite-pick-row').forEach(row => {
+    row.onclick = () => {
+      const selected = el.querySelectorAll('.invite-pick-row.selected');
+      const isSel = row.classList.contains('selected');
+      if (!isSel && selected.length >= 3) return;
+      row.classList.toggle('selected');
+      const chk = row.querySelector('.chk');
+      chk.classList.toggle('checked');
+      chk.textContent = row.classList.contains('selected') ? '✓' : '';
+    };
+  });
+}
+// 클릭 한 번으로 즉시 초대 - 방 대기실 안에서 한 명씩 추가 초대할 때
+function renderSingleInvitePicker(containerId, onPick) {
+  const el = document.getElementById(containerId);
+  const users = getInvitableUsers();
+  if (!users.length) { el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:6px 2px">초대 가능한 접속중 유저가 없어요</div>'; return; }
+  el.innerHTML = users.map(u => `<div class="invite-pick-row" data-usercode="${u.userCode}">${inviteRowLabel(u)}</div>`).join('');
+  el.querySelectorAll('.invite-pick-row').forEach(row => { row.onclick = () => onPick(row.dataset.usercode); });
+}
+
+// ── 방 만들기 ────────────────────────────────────────────────────────────
+document.getElementById('btn-open-create-room').onclick = () => {
+  document.getElementById('input-room-title').value = '';
+  document.getElementById('input-room-code').value = '';
+  document.getElementById('create-room-error').textContent = '';
+  renderInvitePicker('create-room-invite-list');
+  document.getElementById('modal-create-room').style.display = 'flex';
+};
+document.getElementById('btn-cancel-create-room').onclick = () => {
+  document.getElementById('modal-create-room').style.display = 'none';
+};
+document.getElementById('btn-submit-create-room').onclick = () => {
+  const title = document.getElementById('input-room-title').value.trim();
+  const code = document.getElementById('input-room-code').value.trim();
+  const inviteTargets = [...document.querySelectorAll('#create-room-invite-list .invite-pick-row.selected')].map(r => r.dataset.usercode);
+  socket.emit('createRoom', { title, code, inviteTargets });
+};
+socket.on('createRoomError', msg => {
+  document.getElementById('create-room-error').textContent = msg;
+});
+socket.on('createRoomOk', () => {
+  document.getElementById('modal-create-room').style.display = 'none';
+});
+
+// ── 방 대기실 ────────────────────────────────────────────────────────────
+socket.on('roomWaiting', (payload) => {
+  inWaitingRoom = true;
+  currentRoomId = payload.id;
+  const isHost = me && me.userCode === payload.hostCode;
+  document.getElementById('waiting-room-title').textContent = payload.title;
+  document.getElementById('waiting-room-code').textContent = payload.locked ? `코드: ${payload.code}` : '';
+  document.getElementById('waiting-players').innerHTML = payload.players.map(p => {
+    const hostTag = p.isHost ? '<b>(방장)</b> ' : '';
+    const readyTag = !p.isHost ? (p.ready ? ' — ✅ 준비완료' : ' — ⏳ 대기중') : '';
+    const kickBtn = (isHost && !p.isHost) ? `<span class="kick-x" data-usercode="${p.userCode}">✕</span>` : '';
+    return `<div class="waiting-player">${hostTag}${nameWithBadges(p)}${readyTag}${kickBtn}</div>`;
+  }).join('');
+  document.querySelectorAll('#waiting-players .kick-x').forEach(el => {
+    el.onclick = () => {
+      if (confirm('이 사람을 방에서 내보낼까요?')) socket.emit('kickFromRoom', { targetUserCode: el.dataset.usercode });
+    };
+  });
+  document.getElementById('invite-in-room-list').style.display = 'none';
+  document.getElementById('room-start-error').textContent = '';
+  document.getElementById('modal-create-room').style.display = 'none';
+  document.getElementById('modal-room-code').style.display = 'none';
+
+  const myReady = payload.players.find(p => p.userCode === me?.userCode)?.ready;
+  document.getElementById('btn-mark-ready').style.display = (!isHost && !myReady) ? '' : 'none';
+  document.getElementById('btn-start-room-game').style.display = isHost ? '' : 'none';
+  document.getElementById('btn-start-room-game').disabled = isHost && !(payload.allReady && payload.players.length >= 2);
+  document.getElementById('btn-invite-in-room').style.display = isHost ? '' : 'none';
+
+  showScreen('screen-waiting');
+});
+
+document.getElementById('btn-mark-ready').onclick = () => {
+  socket.emit('markRoomReady');
+  document.getElementById('btn-mark-ready').style.display = 'none';
+};
+
+socket.on('kickedFromRoom', ({ roomTitle }) => {
+  toast(`"${roomTitle}"에서 방장이 내보냈어요`);
+  enterLobby();
+});
+
+document.getElementById('btn-invite-in-room').onclick = () => {
+  const el = document.getElementById('invite-in-room-list');
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  socket.emit('getRanking');
+  renderSingleInvitePicker('invite-in-room-list', (userCode) => {
+    socket.emit('inviteToRoom', { targetUserCode: userCode });
+    el.style.display = 'none';
+  });
+  el.style.display = '';
+};
+
+document.getElementById('btn-start-room-game').onclick = () => {
+  socket.emit('startRoomGame');
 };
 socket.on('adminStartError', msg => {
-  document.getElementById('admin-start-error').textContent = msg;
+  document.getElementById('room-start-error').textContent = msg;
 });
 
 socket.on('gameState', () => {
@@ -144,8 +305,8 @@ socket.on('gameState', () => {
 });
 
 document.getElementById('btn-leave-waiting').onclick = () => {
-  socket.emit('leaveWaiting');
-  showScreen('screen-main');
+  socket.emit('leaveRoom');
+  enterLobby();
 };
 
 // ── Settings ───────────────────────────────────────────────────────────
@@ -280,18 +441,6 @@ socket.on('adminLoginResult', ({ ok }) => {
   }
 });
 
-document.getElementById('btn-save-entry-code').onclick = () => {
-  const code = document.getElementById('input-entry-code').value.trim();
-  if (!code) return;
-  socket.emit('adminSetEntryCode', { code });
-};
-socket.on('adminSetEntryCodeResult', ({ ok }) => {
-  if (ok) {
-    document.getElementById('settings-msg').textContent = '입장 코드 변경 완료';
-    setTimeout(() => document.getElementById('settings-msg').textContent = '', 2000);
-  }
-});
-
 document.getElementById('btn-manage-users').onclick = () => {
   socket.emit('adminGetUsers');
   document.getElementById('modal-users').style.display = 'flex';
@@ -356,11 +505,7 @@ socket.on('presenceList', ({ online }) => {
   }
   renderRanking(activeRankingMode);
 });
-function tryInvite(userCode, userName) {
-  if (window.presencePending) { alert('이미 대기 중인 초대가 있어요'); return; }
-  if (!confirm(`${userName}님을 멀티모드에 초대하시겠습니까?`)) return;
-  socket.emit('sendInvite', { targetUserCode: userCode });
-}
+
 function winRate(wins, games) {
   if (!games) return '-';
   const rate = Math.floor((wins / games) * 1000) / 10;
@@ -402,12 +547,11 @@ function renderRanking(mode) {
     const avatarEmoji = (AVATARS.find(a => a.key === r.avatar) || AVATARS[0]).emoji;
     const isRank1 = i === 0;
     const isMe = me && r.userCode === me.userCode;
-    const canInvite = isAdmin && r.online && me && r.userCode !== me.userCode;
-    const rowClasses = ['prow', isRank1 && 'rank1', isMe && 'me', canInvite && 'presence-clickable'].filter(Boolean).join(' ');
+    const rowClasses = ['prow', isRank1 && 'rank1', isMe && 'me'].filter(Boolean).join(' ');
     const rankLabel = isRank1 ? (mode === 'multi' ? '💎' : '👑') : String(i + 1);
     const amount = mode === 'multi' ? '₩' + r.multiBalance?.toLocaleString() : (r.singlePoints ?? 0).toLocaleString() + '점';
     const pname = `<span class="pname">${r.userName}</span>`;
-    return `<div class="${rowClasses}"${canInvite ? ` data-usercode="${r.userCode}" data-username="${r.userName}"` : ''}>
+    return `<div class="${rowClasses}">
       <div class="prank">${rankLabel}</div>
       <div class="pav-wrap">
         <div class="pav">${avatarEmoji}</div>
@@ -420,9 +564,6 @@ function renderRanking(mode) {
       <div class="pvalue"><div class="amt">${amount}</div><div class="rate">${winRate(wins ?? 0, games ?? 0)}</div></div>
     </div>`;
   }).join('');
-  list.querySelectorAll('[data-usercode]').forEach(row => {
-    row.onclick = () => tryInvite(row.dataset.usercode, row.dataset.username);
-  });
 }
 
 // ── My Stats ───────────────────────────────────────────────────────────

@@ -22,20 +22,19 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, 'public')));
 
 const sessions = new Map();
-const waitingRoom = new Map();
-let activeGame = null;
+// 방(room) 시스템: 서버 전체에 여러 방이 동시에 존재 가능
+// room = { id, title, code(선택, 없으면 잠금 없는 공개방), members: Set<userCode>,
+//          game, lastGamePlayers, lastGameWinnerCode, readyPhase, createdBy }
+const rooms = new Map();
+let roomIdCounter = 1;
 const singleGames = new Map();
 const lastSingleWinners = new Map(); // userCode → 마지막 싱글 승자 userCode
-let lastMultiGamePlayers = null;
-let lastMultiGameWinnerCode = null;
-let readyPhase = null; // { requiredCodes: Set, readyCodes: Set, deadlines: Map(userCode->ms), timers: Map(userCode->Timeout) }
-const entryAttempts = new Map(); // socket.id → 시도 횟수
-const entryBlocked = new Set();  // socket.id → 차단
+const lastSingleSeating = new Map(); // userCode → 마지막 싱글게임의 좌석 순서(userCode 배열, 원래 순서 그대로)
 
 // ── 접속중 표시 & 초대 ────────────────────────────────────────────────────
 const presenceVisible = new Set(); // userCode → 탭이 보이는 중(연결+포커스)
-const pendingInvites = new Map();  // fromCode(관리자) → { toCode, wasPlayingSingle }
-const inviteApprovedWaiting = new Map(); // userCode → 대기실 자동입장 만료시각(ms), 페이지 이동 후 재접속용
+const pendingInvites = new Map();  // fromCode → { toCode, wasPlayingSingle, roomId }
+const inviteApprovedWaiting = new Map(); // userCode → { roomId, expiresAt } 페이지 이동 후 재접속용
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -57,6 +56,89 @@ function broadcastGame(game) {
       emitToPlayer(p.userCode, 'gameState', getPublicState(game, p.userCode));
     }
   }
+}
+
+// ── 방(room) 헬퍼 ────────────────────────────────────────────────────────────
+function genRoomId() { return `room_${roomIdCounter++}`; }
+
+// 이 유저가 지금 (대기중이든 게임중이든) 속해있는 방을 찾는다
+// 재접속(로그인, 페이지 이동으로 인한 소켓 재연결 포함) 시 "원래 있던 방"을 찾을 때 사용.
+// 연결이 끊겨 AI로 대체된 상태여도(예: index.html→game.html 이동 중 잠깐 끊김) 찾아내야
+// 다시 사람으로 되돌릴 수 있으므로, isAI 여부와 상관없이 매칭한다.
+function findRoomOfUser(userCode) {
+  for (const room of rooms.values()) {
+    if (room.members.has(userCode)) return room;
+    if (room.game?.players.some(p => p.userCode === userCode)) return room;
+    // 게임 종료 후 "한 판 더" 준비 단계: members도 비어있고 game도 null이라 lastGamePlayers로도 찾아야 함
+    if (room.lastGamePlayers?.some(p => p.userCode === userCode)) return room;
+  }
+  return null;
+}
+
+// 초대/참가 대상으로 쓸 수 있는지: 다른 방에 대기 중이거나, 다른 방 게임에서 "현재 사람이 조종 중"이면 불가.
+// 연결이 끊겨 AI로 대체된 사람은 초대 가능(자유로운 상태)으로 취급.
+function isAvailableForRoom(userCode) {
+  for (const room of rooms.values()) {
+    if (room.members.has(userCode)) return false;
+    if (room.game?.players.some(p => p.userCode === userCode && !p.isAI)) return false;
+  }
+  return true;
+}
+
+function roomSummary(room) {
+  const playing = !!room.game && room.game.status === 'playing';
+  return {
+    id: room.id,
+    title: room.title,
+    locked: !!room.code,
+    memberCount: playing ? room.game.players.filter(p => !p.isAI).length : room.members.size,
+    playing,
+  };
+}
+
+function broadcastRoomList() {
+  const list = [...rooms.values()].map(roomSummary);
+  io.emit('roomList', { rooms: list });
+}
+
+async function broadcastRoomWaiting(room) {
+  const badges = await getGlobalBadges();
+  const players = [];
+  for (const uc of room.members) {
+    const u = await db.getUser(uc);
+    if (u) players.push({
+      userCode: u.userCode, userName: u.userName, isAdmin: u.isAdmin === 1,
+      isHost: uc === room.createdBy, ready: uc === room.createdBy || room.readyMembers.has(uc),
+      ...badgeFlagsFor(u.userCode, badges)
+    });
+  }
+  const allReady = [...room.members].filter(uc => uc !== room.createdBy).every(uc => room.readyMembers.has(uc));
+  const payload = { id: room.id, title: room.title, locked: !!room.code, code: room.code || null, hostCode: room.createdBy, allReady, players };
+  for (const uc of room.members) emitToPlayer(uc, 'roomWaiting', payload);
+}
+
+// 게임 시작 전, 누구 하나라도 명시적으로 나가면 방 자체를 없앤다 (남은 사람도 로비로 돌아감)
+function closeRoom(room, reason) {
+  if (room.readyPhase) { for (const t of room.readyPhase.timers.values()) clearTimeout(t); }
+  for (const uc of room.members) {
+    const sid = getSocketId(uc);
+    const s = sid && sessions.get(sid);
+    if (s) s.roomId = null;
+    emitToPlayer(uc, 'roomClosed', { reason });
+  }
+  rooms.delete(room.id);
+  broadcastRoomList();
+}
+
+// 연결 끊김(네트워크 문제 등) 때는 방을 없애지 않고 그 사람만 빠진 걸로 처리 (재접속 여지를 둠)
+function removeMemberFromRoom(room, userCode) {
+  room.members.delete(userCode);
+  const stillHasHumans = room.members.size > 0 || (room.game?.status === 'playing' && room.game.players.some(p => !p.isAI));
+  if (!stillHasHumans) {
+    if (room.readyPhase) { for (const t of room.readyPhase.timers.values()) clearTimeout(t); }
+    rooms.delete(room.id);
+  }
+  broadcastRoomList();
 }
 
 // ── 접속중 표시 ────────────────────────────────────────────────────────────
@@ -114,67 +196,66 @@ function resumeIfInvitePaused(userCode) {
   if (cur?.isAI) setTimeout(() => runAITurn(g, cur), 2000 + Math.random() * 1000);
 }
 
-// ── 멀티모드 "한 판 더" 준비 단계 ────────────────────────────────────────
+// ── 멀티모드 "한 판 더" 준비 단계 (방 단위) ─────────────────────────────────
 const READY_TIMEOUT_MS = 30000;
 
-function clearReadyPhase() {
-  if (readyPhase) {
-    for (const t of readyPhase.timers.values()) clearTimeout(t);
+function clearReadyPhase(room) {
+  if (room.readyPhase) {
+    for (const t of room.readyPhase.timers.values()) clearTimeout(t);
   }
-  readyPhase = null;
+  room.readyPhase = null;
 }
 
-function broadcastReadyStatus() {
-  if (!readyPhase || !lastMultiGamePlayers) return;
+function broadcastReadyStatus(room) {
+  if (!room.readyPhase || !room.lastGamePlayers) return;
   const payload = {
-    requiredCodes: [...readyPhase.requiredCodes],
-    readyCodes: [...readyPhase.readyCodes],
-    deadlines: Object.fromEntries(readyPhase.deadlines),
+    requiredCodes: [...room.readyPhase.requiredCodes],
+    readyCodes: [...room.readyPhase.readyCodes],
+    deadlines: Object.fromEntries(room.readyPhase.deadlines),
   };
-  for (const p of lastMultiGamePlayers) {
+  for (const p of room.lastGamePlayers) {
     if (!p.isAI) emitToPlayer(p.userCode, 'readyStatus', payload);
   }
 }
 
+// userCode가 속한 방의 readyPhase에서 준비 완료 표시
 function markReady(userCode) {
-  if (!readyPhase || !readyPhase.requiredCodes.has(userCode)) return;
-  if (readyPhase.readyCodes.has(userCode)) return;
-  readyPhase.readyCodes.add(userCode);
-  const t = readyPhase.timers.get(userCode);
+  const room = findRoomOfUser(userCode);
+  if (!room?.readyPhase || !room.readyPhase.requiredCodes.has(userCode)) return;
+  if (room.readyPhase.readyCodes.has(userCode)) return;
+  room.readyPhase.readyCodes.add(userCode);
+  const t = room.readyPhase.timers.get(userCode);
   if (t) clearTimeout(t);
-  readyPhase.timers.delete(userCode);
-  broadcastReadyStatus();
+  room.readyPhase.timers.delete(userCode);
+  broadcastReadyStatus(room);
 }
 
-// 멀티모드 게임 종료 직후 호출: 다음 판 "준비" 단계를 세팅한다.
-// 실제 사람이 관리자 혼자(또는 0명)만 남았으면 준비 단계 없이 메인으로 안내.
-async function startReadyPhase() {
-  clearReadyPhase();
-  if (!lastMultiGamePlayers) return;
+// 멀티모드 게임 종료 직후 호출: 해당 방에 다음 판 "준비" 단계를 세팅한다.
+// 실제 사람이 혼자(또는 0명)만 남았으면 준비 단계 없이 메인으로 안내.
+async function startReadyPhase(room) {
+  clearReadyPhase(room);
+  if (!room.lastGamePlayers) return;
 
-  const onlineHumans = lastMultiGamePlayers.filter(p => !p.isAI && getSocketId(p.userCode));
+  const onlineHumans = room.lastGamePlayers.filter(p => !p.isAI && getSocketId(p.userCode));
   if (onlineHumans.length <= 1) {
     for (const p of onlineHumans) {
       emitToPlayer(p.userCode, 'playAgainError', '함께할 사람이 없어 메인으로 돌아갑니다.');
     }
+    removeMemberFromRoom(room, room.lastGamePlayers.find(p => !p.isAI)?.userCode || '__none__');
     return;
   }
 
-  const admins = new Set();
-  for (const p of onlineHumans) {
-    const u = await db.getUser(p.userCode);
-    if (u?.isAdmin) admins.add(p.userCode);
-  }
-  const requiredCodes = new Set(onlineHumans.filter(p => !admins.has(p.userCode)).map(p => p.userCode));
+  // 방장은 "다시 시작" 버튼을 직접 누르는 쪽이라 준비 대상에서 제외, 나머지만 준비 확인
+  const requiredCodes = new Set(onlineHumans.filter(p => p.userCode !== room.createdBy).map(p => p.userCode));
 
-  readyPhase = { requiredCodes, readyCodes: new Set(), deadlines: new Map(), timers: new Map() };
+  room.readyPhase = { requiredCodes, readyCodes: new Set(), deadlines: new Map(), timers: new Map() };
   const deadline = Date.now() + READY_TIMEOUT_MS;
   for (const code of requiredCodes) {
-    readyPhase.deadlines.set(code, deadline);
-    readyPhase.timers.set(code, setTimeout(() => markReady(code), READY_TIMEOUT_MS));
+    room.readyPhase.deadlines.set(code, deadline);
+    room.readyPhase.timers.set(code, setTimeout(() => markReady(code), READY_TIMEOUT_MS));
   }
 
-  broadcastReadyStatus();
+  broadcastReadyStatus(room);
 }
 
 const DOUBLE_EVENT_CHANCE = 0.1; // 깜짝 2배 이벤트 판 확률
@@ -587,6 +668,7 @@ async function endGame(game, winnerCode) {
     const humanPlayer = game.players.find(p => !p.isAI);
     if (humanPlayer) {
       lastSingleWinners.set(humanPlayer.userCode, actualWinnerCode);
+      lastSingleSeating.set(humanPlayer.userCode, game.players.map(p => p.userCode));
       singleGames.delete(humanPlayer.userCode);
     }
   } else {
@@ -599,12 +681,16 @@ async function endGame(game, winnerCode) {
       }
     }
 
-    lastMultiGamePlayers = game.players.map(p => ({
-      userCode: p.userCode, userName: p.userName, isAI: p.isAI, avatar: p.avatar
-    }));
-    lastMultiGameWinnerCode = actualWinnerCode;
-    activeGame = null;
-    await startReadyPhase();
+    const room = rooms.get(game.roomId);
+    if (room) {
+      room.lastGamePlayers = game.players.map(p => ({
+        userCode: p.userCode, userName: p.userName, isAI: p.isAI, avatar: p.avatar
+      }));
+      room.lastGameWinnerCode = actualWinnerCode;
+      room.game = null;
+      broadcastRoomList();
+      await startReadyPhase(room);
+    }
   }
 }
 
@@ -626,7 +712,8 @@ io.on('connection', (socket) => {
       }
     }
 
-    sessions.set(socket.id, { userCode: user.userCode, userName: user.userName, showOnline: user.showOnline !== 0, isAdmin: user.isAdmin === 1 });
+    const sess = { userCode: user.userCode, userName: user.userName, showOnline: user.showOnline !== 0, isAdmin: user.isAdmin === 1, roomId: null };
+    sessions.set(socket.id, sess);
     const myBadges = badgeFlagsFor(user.userCode, await getGlobalBadges());
     socket.emit('loginSuccess', {
       userCode: user.userCode, userName: user.userName,
@@ -636,12 +723,19 @@ io.on('connection', (socket) => {
       showOnline: user.showOnline !== 0,
       ...myBadges
     });
-    // 멀티 게임 재연결: 싱글보다 멀티 우선
-    if (activeGame && activeGame.status === 'playing') {
-      const player = activeGame.players.find(p => p.userCode === user.userCode);
-      if (player) {
-        player.isAI = false;
-        socket.emit('gameState', getPublicState(activeGame, user.userCode));
+    // 멀티 방 재연결: 싱글보다 멀티 우선
+    const myRoom = findRoomOfUser(user.userCode);
+    if (myRoom) {
+      sess.roomId = myRoom.id;
+      if (myRoom.game && myRoom.game.status === 'playing') {
+        const player = myRoom.game.players.find(p => p.userCode === user.userCode);
+        if (player) {
+          player.isAI = false;
+          socket.emit('gameState', getPublicState(myRoom.game, user.userCode));
+          return;
+        }
+      } else {
+        broadcastRoomWaiting(myRoom);
         return;
       }
     }
@@ -690,18 +784,6 @@ io.on('connection', (socket) => {
     socket.emit('adminUsers', await db.getAllUsers());
   });
 
-  socket.on('adminSetEntryCode', async ({ code }) => {
-    const sess = sessions.get(socket.id);
-    if (!sess) return;
-    const me = await db.getUser(sess.userCode);
-    if (!me?.isAdmin) return;
-    await db.setSetting('entryCode', code);
-    // 코드 변경 시 입장 차단 및 시도 횟수 초기화
-    entryAttempts.clear();
-    entryBlocked.clear();
-    socket.emit('adminSetEntryCodeResult', { ok: true });
-  });
-
   socket.on('setWinMessage', async ({ message }) => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
@@ -740,29 +822,22 @@ io.on('connection', (socket) => {
     broadcastPresence();
   });
 
-  // ── 멀티 초대 (관리자 전용) ──────────────────────────────────────────────
-  socket.on('sendInvite', async ({ targetUserCode }) => {
-    const sess = sessions.get(socket.id);
-    if (!sess) return;
-    const me = await db.getUser(sess.userCode);
-    if (!me?.isAdmin) return;
-    if (targetUserCode === sess.userCode) return;
-    if (pendingInvites.has(sess.userCode)) {
-      socket.emit('inviteError', '이미 대기 중인 초대가 있어요'); return;
-    }
+  // ── 멀티 초대 (누구나 가능) ──────────────────────────────────────────────
+  // room이 없으면(=아직 방을 안 만든 상태) 새 방을 하나 만들어서 초대한다 (랭킹 빠른초대 등)
+  async function sendRoomInvite(sess, room, targetUserCode) {
+    if (targetUserCode === sess.userCode) return { ok: false, msg: '자기 자신은 초대할 수 없어요' };
     if ([...pendingInvites.values()].some(v => v.toCode === targetUserCode)) {
-      socket.emit('inviteError', '이미 다른 초대가 진행 중이에요'); return;
+      return { ok: false, msg: '이미 다른 초대가 진행 중이에요' };
     }
     const targetSid = getSocketId(targetUserCode);
     const online = new Set(visibleOnlineCodes());
-    if (!targetSid || !online.has(targetUserCode)) {
-      socket.emit('inviteError', '상대방이 접속중이 아니에요'); return;
-    }
-    if (activeGame?.players.some(p => p.userCode === targetUserCode && !p.isAI)) {
-      socket.emit('inviteError', '상대방이 멀티 게임 중이에요'); return;
-    }
+    if (!targetSid || !online.has(targetUserCode)) return { ok: false, msg: '상대방이 접속중이 아니에요' };
+    if (!isAvailableForRoom(targetUserCode)) return { ok: false, msg: '상대방이 이미 다른 방에 있어요' };
+    if (room.members.size >= 4) return { ok: false, msg: '방 인원이 가득 찼어요' };
+
     const targetUser = await db.getUser(targetUserCode);
-    if (!targetUser) return;
+    if (!targetUser) return { ok: false, msg: '존재하지 않는 유저예요' };
+    const me = await db.getUser(sess.userCode);
 
     const targetSingle = singleGames.get(targetUserCode);
     const wasPlayingSingle = !!(targetSingle && targetSingle.status === 'playing' && !targetSingle.paused);
@@ -775,79 +850,85 @@ io.on('connection', (socket) => {
       broadcastGame(targetSingle);
     }
 
-    pendingInvites.set(sess.userCode, { toCode: targetUserCode, wasPlayingSingle });
+    pendingInvites.set(`${sess.userCode}→${targetUserCode}`, { toCode: targetUserCode, wasPlayingSingle, roomId: room.id, fromCode: sess.userCode });
     emitToPlayer(targetUserCode, 'inviteReceived', {
-      fromCode: sess.userCode, fromName: sess.userName, fromAvatar: me.avatar || 'person'
+      fromCode: sess.userCode, fromName: sess.userName, fromAvatar: me?.avatar || 'person', roomTitle: room.title
     });
-    socket.emit('inviteSent', { toCode: targetUserCode, toName: targetUser.userName, toAvatar: targetUser.avatar || 'person' });
-  });
+    return { ok: true, toName: targetUser.userName, toAvatar: targetUser.avatar || 'person' };
+  }
 
-  socket.on('cancelInvite', () => {
+  // targetUserCode 없으면 내가 보낸 모든 초대를 취소 (여러 명 동시 초대 지원)
+  socket.on('cancelInvite', ({ targetUserCode } = {}) => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
-    const inv = pendingInvites.get(sess.userCode);
-    if (!inv) return;
-    pendingInvites.delete(sess.userCode);
-    resumeIfInvitePaused(inv.toCode);
-    emitToPlayer(inv.toCode, 'inviteCancelled', {});
+    const keys = [...pendingInvites.keys()].filter(k => pendingInvites.get(k).fromCode === sess.userCode && (!targetUserCode || pendingInvites.get(k).toCode === targetUserCode));
+    for (const key of keys) {
+      const inv = pendingInvites.get(key);
+      pendingInvites.delete(key);
+      resumeIfInvitePaused(inv.toCode);
+      emitToPlayer(inv.toCode, 'inviteCancelled', {});
+    }
   });
 
-  socket.on('respondInvite', async ({ accept }) => {
+  socket.on('respondInvite', async ({ accept, fromCode } = {}) => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
-    const entry = [...pendingInvites].find(([, v]) => v.toCode === sess.userCode);
-    if (!entry) return;
-    const [fromCode, inv] = entry;
-    pendingInvites.delete(fromCode);
+    const key = [...pendingInvites].find(([, v]) => v.toCode === sess.userCode && (!fromCode || v.fromCode === fromCode));
+    if (!key) return;
+    const [pkey, inv] = key;
+    pendingInvites.delete(pkey);
 
     if (!accept) {
       resumeIfInvitePaused(sess.userCode);
-      emitToPlayer(fromCode, 'inviteDeclined', { byName: sess.userName });
+      emitToPlayer(inv.fromCode, 'inviteDeclined', { byName: sess.userName });
       return;
     }
 
-    // 양쪽의 진행 중이던 싱글 게임 정리
-    for (const code of [fromCode, sess.userCode]) {
-      const g = singleGames.get(code);
-      if (g) {
-        clearTimer(g);
-        clearThankYouTimeout(g);
-        g.status = 'ended';
-        singleGames.delete(code);
-      }
+    const room = rooms.get(inv.roomId);
+    if (!room) {
+      socket.emit('inviteError', '방이 이미 사라졌어요'); return;
+    }
+    if (room.members.size >= 4) {
+      emitToPlayer(inv.fromCode, 'inviteError', '방이 꽉 찼습니다');
+      emitToPlayer(sess.userCode, 'inviteError', '방이 꽉 찼습니다');
+      return;
     }
 
-    if (waitingRoom.size + 2 > 4) {
-      emitToPlayer(fromCode, 'inviteError', '대기실이 꽉 찼습니다');
-      emitToPlayer(sess.userCode, 'inviteError', '대기실이 꽉 찼습니다');
-      return;
+    // 내 진행 중이던 싱글 게임 정리
+    const g = singleGames.get(sess.userCode);
+    if (g) {
+      clearTimer(g);
+      clearThankYouTimeout(g);
+      g.status = 'ended';
+      singleGames.delete(sess.userCode);
     }
 
     const expiresAt = Date.now() + 20000;
-    inviteApprovedWaiting.set(fromCode, expiresAt);
-    inviteApprovedWaiting.set(sess.userCode, expiresAt);
+    inviteApprovedWaiting.set(sess.userCode, { roomId: room.id, expiresAt });
 
-    emitToPlayer(fromCode, 'inviteResponded', { accepted: true, byName: sess.userName });
-    emitToPlayer(fromCode, 'inviteAccepted', {});
-    emitToPlayer(sess.userCode, 'inviteAccepted', {});
+    emitToPlayer(inv.fromCode, 'inviteResponded', { accepted: true, byName: sess.userName });
+    // 보낸 사람(sender)은 이미 방에 있으므로 그냥 UI만 정리, 받은 사람(receiver)만 joinRoomViaInvite로 실제 입장
+    emitToPlayer(inv.fromCode, 'inviteAccepted', { role: 'sender', byName: sess.userName });
+    emitToPlayer(sess.userCode, 'inviteAccepted', { role: 'receiver', roomId: room.id });
   });
 
-  // 초대 수락 후 대기실 자동 입장 (페이지 이동으로 소켓이 재연결된 경우 포함, 입장코드 불필요)
-  socket.on('joinWaitingViaInvite', async () => {
+  // 초대 수락 후 방 자동 입장 (페이지 이동으로 소켓이 재연결된 경우 포함, 코드 불필요)
+  socket.on('joinRoomViaInvite', async () => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
-    const expiry = inviteApprovedWaiting.get(sess.userCode);
-    if (!expiry || expiry < Date.now()) {
+    const approved = inviteApprovedWaiting.get(sess.userCode);
+    if (!approved || approved.expiresAt < Date.now()) {
       socket.emit('joinMultiError', '초대가 만료됐어요.'); return;
     }
     inviteApprovedWaiting.delete(sess.userCode);
-    const user = await db.getUser(sess.userCode);
-    if (!user) return;
-    if (waitingRoom.size >= 4) { socket.emit('joinMultiError', '대기실이 꽉 찼습니다 (최대 4명).'); return; }
-    waitingRoom.set(sess.userCode, socket.id);
-    socket.join('waiting');
-    await broadcastWaiting();
-    socket.emit('joinMultiOk');
+    const room = rooms.get(approved.roomId);
+    if (!room) { socket.emit('joinMultiError', '방이 이미 사라졌어요.'); return; }
+    if (room.members.size >= 4) { socket.emit('joinMultiError', '방이 꽉 찼습니다 (최대 4명).'); return; }
+    room.members.add(sess.userCode);
+    sess.roomId = room.id;
+    await broadcastRoomWaiting(room);
+    broadcastRoomList();
+    socket.emit('joinMultiOk', { roomId: room.id });
   });
 
   socket.on('charge', async ({ mode }) => {
@@ -865,8 +946,9 @@ io.on('connection', (socket) => {
     if (!user) return;
 
     // 멀티게임에 참가 중이면 AI로 교체하고 싱글 시작
-    if (activeGame && activeGame.status === 'playing') {
-      const inMulti = activeGame.players.find(p => p.userCode === user.userCode);
+    const myRoom = findRoomOfUser(user.userCode);
+    if (myRoom?.game && myRoom.game.status === 'playing') {
+      const inMulti = myRoom.game.players.find(p => p.userCode === user.userCode);
       if (inMulti) inMulti.isAI = true;
     }
 
@@ -886,17 +968,17 @@ io.on('connection', (socket) => {
     ].sort(() => Math.random() - 0.5);
     const humanPlayer = { userCode: user.userCode, userName: user.userName, isAI: false, singlePoints: user.singlePoints, avatar: user.avatar || 'person' };
 
-    // 지난 판 1등이 다음 판 선공
+    // 지난 판 1등이 다음 판 선공, 나머지는 지난 판 좌석 순서 그대로 이어감(승자 기준으로 회전만)
     const lastWinnerCode = lastSingleWinners.get(user.userCode);
+    const lastSeating = lastSingleSeating.get(user.userCode);
     let players;
-    if (lastWinnerCode && lastWinnerCode !== user.userCode) {
-      const winnerAI = aiPlayers.find(p => p.userCode === lastWinnerCode);
-      if (winnerAI) {
-        const otherAIs = aiPlayers.filter(p => p.userCode !== lastWinnerCode);
-        players = [winnerAI, humanPlayer, ...otherAIs];
-      } else {
-        players = [humanPlayer, ...aiPlayers];
-      }
+    if (lastWinnerCode && lastWinnerCode !== user.userCode && lastSeating?.includes(lastWinnerCode)) {
+      const byCode = new Map([humanPlayer, ...aiPlayers].map(p => [p.userCode, p]));
+      const winnerIdx = lastSeating.indexOf(lastWinnerCode);
+      const rotatedCodes = [...lastSeating.slice(winnerIdx), ...lastSeating.slice(0, winnerIdx)];
+      players = rotatedCodes.map(code => byCode.get(code)).filter(Boolean);
+      // 방어: 혹시 매핑 안 된 코드가 있으면(비정상 상황) 예전 방식으로 대체
+      if (players.length !== 4) players = [humanPlayer, ...aiPlayers];
     } else {
       players = [humanPlayer, ...aiPlayers];
     }
@@ -911,55 +993,149 @@ io.on('connection', (socket) => {
     startInitialTurn(game, cur, 5000 + Math.random() * 3000);
   });
 
-  socket.on('joinMulti', async ({ entryCode }) => {
+  // 멀티모드 진입: 잔액만 확인하고 바로 로비(방 목록)로
+  socket.on('joinMulti', async () => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
-    if (entryBlocked.has(socket.id)) {
-      socket.emit('joinMultiError', '입장 코드 5회 초과. 코드 변경 후 다시 시도하세요.');
-      return;
-    }
-    const stored = await db.getSetting('entryCode');
-    if (entryCode !== stored) {
-      const cnt = (entryAttempts.get(socket.id) || 0) + 1;
-      entryAttempts.set(socket.id, cnt);
-      if (cnt >= 5) {
-        entryBlocked.add(socket.id);
-        socket.emit('joinMultiError', `입장 코드가 틀렸습니다. (${cnt}/5회 - 입장 차단)`);
-      } else {
-        socket.emit('joinMultiError', `입장 코드가 틀렸습니다. (${cnt}/5회)`);
-      }
-      return;
-    }
-    entryAttempts.delete(socket.id);
     const user = await db.getUser(sess.userCode);
     if (!user) return;
     if (user.multiBalance <= 0) { socket.emit('joinMultiError', '잔액이 없습니다.'); return; }
-    if (waitingRoom.size >= 4) { socket.emit('joinMultiError', '대기실이 꽉 찼습니다 (최대 4명).'); return; }
-    waitingRoom.set(sess.userCode, socket.id);
-    socket.join('waiting');
-    await broadcastWaiting();
-    socket.emit('joinMultiOk');
+    socket.emit('joinMultiOk', { roomId: null });
   });
 
-  async function broadcastWaiting() {
-    const badges = await getGlobalBadges();
-    const players = [];
-    for (const [uc] of waitingRoom) {
-      const u = await db.getUser(uc);
-      if (u) players.push({ userCode: u.userCode, userName: u.userName, isAdmin: u.isAdmin === 1, ...badgeFlagsFor(u.userCode, badges) });
-    }
-    io.to('waiting').emit('waitingRoom', { players });
-  }
+  socket.on('listRooms', () => {
+    socket.emit('roomList', { rooms: [...rooms.values()].map(roomSummary) });
+  });
 
-  socket.on('adminStartGame', async () => {
+  // 방 만들기: 제목 필수, 코드는 선택(없으면 잠금 없는 공개방), 초대 대상 최대 3명(선택)
+  socket.on('createRoom', async ({ title, code, inviteTargets } = {}) => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
-    const me = await db.getUser(sess.userCode);
-    if (!me?.isAdmin) return;
-    if (waitingRoom.size < 2) { socket.emit('adminStartError', '최소 2명 이상 필요합니다.'); return; }
+    if (!isAvailableForRoom(sess.userCode)) { socket.emit('createRoomError', '이미 다른 방에 참여 중이에요'); return; }
+    const trimmedTitle = (title || '').trim().slice(0, 20);
+    if (!trimmedTitle) { socket.emit('createRoomError', '방 제목을 입력해주세요'); return; }
+    const trimmedCode = (code || '').trim().slice(0, 10) || null;
+    if (trimmedCode && [...rooms.values()].some(r => r.code === trimmedCode)) {
+      socket.emit('createRoomError', '이미 사용 중인 방 코드예요'); return;
+    }
+
+    const room = {
+      id: genRoomId(), title: trimmedTitle, code: trimmedCode,
+      members: new Set([sess.userCode]),
+      readyMembers: new Set(), // 방장 제외, 준비 완료한 멤버
+      game: null, lastGamePlayers: null, lastGameWinnerCode: null, readyPhase: null,
+      createdBy: sess.userCode,
+    };
+    rooms.set(room.id, room);
+    sess.roomId = room.id;
+    broadcastRoomList();
+    await broadcastRoomWaiting(room);
+    socket.emit('createRoomOk', { roomId: room.id });
+
+    const targets = (inviteTargets || []).slice(0, 3);
+    for (const t of targets) {
+      const r = await sendRoomInvite(sess, room, t);
+      if (!r.ok) socket.emit('inviteError', r.msg);
+    }
+  });
+
+  // 방 목록에서 방 선택: 코드 없는 방은 바로 입장, 코드 있는 방은 코드 검증
+  socket.on('joinRoomByList', async ({ roomId, code } = {}) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    if (!isAvailableForRoom(sess.userCode)) { socket.emit('joinMultiError', '이미 다른 방에 참여 중이에요'); return; }
+    const room = rooms.get(roomId);
+    if (!room) { socket.emit('joinMultiError', '존재하지 않는 방이에요'); return; }
+    if (room.game && room.game.status === 'playing') { socket.emit('joinMultiError', '이미 게임이 진행 중인 방이에요'); return; }
+    if (room.members.size >= 4) { socket.emit('joinMultiError', '방이 꽉 찼습니다 (최대 4명).'); return; }
+    if (room.code && room.code !== (code || '').trim()) {
+      socket.emit('joinRoomNeedsCode', { roomId: room.id, title: room.title }); return;
+    }
+    const user = await db.getUser(sess.userCode);
+    if (!user || user.multiBalance <= 0) { socket.emit('joinMultiError', '잔액이 없습니다.'); return; }
+
+    room.members.add(sess.userCode);
+    sess.roomId = room.id;
+    await broadcastRoomWaiting(room);
+    broadcastRoomList();
+    socket.emit('joinMultiOk', { roomId: room.id });
+  });
+
+  // 방 대기실에서 다른 사람 초대 (누구나 가능)
+  socket.on('inviteToRoom', async ({ targetUserCode } = {}) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    const room = rooms.get(sess.roomId);
+    if (!room) { socket.emit('inviteError', '방에 들어가있지 않아요'); return; }
+    if (sess.userCode !== room.createdBy) { socket.emit('inviteError', '방장만 초대할 수 있어요'); return; }
+    const r = await sendRoomInvite(sess, room, targetUserCode);
+    if (r.ok) socket.emit('inviteSent', { toCode: targetUserCode, toName: r.toName, toAvatar: r.toAvatar });
+    else socket.emit('inviteError', r.msg);
+  });
+
+  // 방 나가기 (게임 시작 전)
+  // 게임 시작 전 "나가기": 나가고 나서 1명 이하만 남으면 방 자체를 없앰 (혼자 남아있어봐야 의미 없으니)
+  socket.on('leaveRoom', () => {
+    const sess = sessions.get(socket.id);
+    if (!sess?.roomId) return;
+    const room = rooms.get(sess.roomId);
+    sess.roomId = null;
+    if (!room) return;
+    room.members.delete(sess.userCode);
+    room.readyMembers.delete(sess.userCode);
+    // 방장이 나가거나, 나가고 나서 1명 이하만 남으면 방 자체를 없앰
+    if (sess.userCode === room.createdBy || room.members.size <= 1) {
+      closeRoom(room, `${sess.userName}님이 나가서 방이 사라졌어요`);
+    } else {
+      broadcastRoomWaiting(room);
+      broadcastRoomList();
+    }
+  });
+
+  // 방장이 다른 멤버를 방에서 내보냄 (게임 시작 전에만)
+  socket.on('kickFromRoom', ({ targetUserCode } = {}) => {
+    const sess = sessions.get(socket.id);
+    if (!sess?.roomId) return;
+    const room = rooms.get(sess.roomId);
+    if (!room || sess.userCode !== room.createdBy) return;
+    if (targetUserCode === room.createdBy) return;
+    if (!room.members.has(targetUserCode)) return;
+
+    room.members.delete(targetUserCode);
+    room.readyMembers.delete(targetUserCode);
+    const targetSid = getSocketId(targetUserCode);
+    const targetSess = targetSid && sessions.get(targetSid);
+    if (targetSess) targetSess.roomId = null;
+    emitToPlayer(targetUserCode, 'kickedFromRoom', { roomTitle: room.title });
+
+    broadcastRoomWaiting(room);
+    broadcastRoomList();
+  });
+
+  // 게임 시작: 방 안에 있는 누구나 가능, 최소 2명, AI로 4명까지 채움
+  // 방장이 아닌 멤버가 "준비" 누름
+  socket.on('markRoomReady', () => {
+    const sess = sessions.get(socket.id);
+    if (!sess?.roomId) return;
+    const room = rooms.get(sess.roomId);
+    if (!room || sess.userCode === room.createdBy) return;
+    room.readyMembers.add(sess.userCode);
+    broadcastRoomWaiting(room);
+  });
+
+  socket.on('startRoomGame', async () => {
+    const sess = sessions.get(socket.id);
+    if (!sess?.roomId) return;
+    const room = rooms.get(sess.roomId);
+    if (!room) return;
+    if (room.game && room.game.status === 'playing') return;
+    if (sess.userCode !== room.createdBy) { emitToPlayer(sess.userCode, 'adminStartError', '방장만 시작할 수 있어요.'); return; }
+    if (room.members.size < 2) { emitToPlayer(sess.userCode, 'adminStartError', '최소 2명 이상 필요합니다.'); return; }
+    const othersReady = [...room.members].filter(uc => uc !== room.createdBy).every(uc => room.readyMembers.has(uc));
+    if (!othersReady) { emitToPlayer(sess.userCode, 'adminStartError', '다른 사람들이 아직 준비되지 않았어요.'); return; }
 
     const humanPlayers = [];
-    for (const [uc] of waitingRoom) {
+    for (const uc of room.members) {
       const u = await db.getUser(uc);
       humanPlayers.push({ userCode: u.userCode, userName: u.userName, isAI: false, multiBalance: u.multiBalance, avatar: u.avatar || 'person' });
     }
@@ -971,7 +1147,7 @@ io.on('connection', (socket) => {
     const aiPlayers = aiPool.slice(0, 4 - humanPlayers.length);
 
     // 참가자들의 기존 싱글게임 정리
-    for (const [uc] of waitingRoom) {
+    for (const uc of room.members) {
       const prev = singleGames.get(uc);
       if (prev) {
         clearTimer(prev);
@@ -982,63 +1158,50 @@ io.on('connection', (socket) => {
     }
 
     const allPlayers = [...humanPlayers, ...aiPlayers].sort(() => Math.random() - 0.5);
-    activeGame = createGame('multi', allPlayers);
-    await snapshotRank1(activeGame);
-    waitingRoom.clear();
+    room.game = createGame('multi', allPlayers);
+    room.game.roomId = room.id;
+    room.game.hostCode = room.createdBy;
+    await snapshotRank1(room.game);
+    room.members.clear();
+    broadcastRoomList();
 
-    for (const p of activeGame.players) {
+    for (const p of room.game.players) {
       if (p.isAI) continue;
-      if (p.userCode === sess.userCode) {
-        // 게임 시작한 admin은 socket.emit으로 직접 전송 (재연결 시 socket.id 불일치 방지)
-        socket.emit('gameState', getPublicState(activeGame, p.userCode));
-      } else {
-        emitToPlayer(p.userCode, 'gameState', getPublicState(activeGame, p.userCode));
-      }
+      emitToPlayer(p.userCode, 'gameState', getPublicState(room.game, p.userCode));
     }
 
-    const cur = getCurrentPlayer(activeGame);
-    startInitialTurn(activeGame, cur, 2000 + Math.random() * 1000);
+    const cur = getCurrentPlayer(room.game);
+    startInitialTurn(room.game, cur, 2000 + Math.random() * 1000);
   });
 
   socket.on('adminStopGame', async () => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
-    const me = await db.getUser(sess.userCode);
-    if (!me) return;
 
-    // 비관리자는 자신의 싱글 게임만 중단 가능
-    if (!me.isAdmin) {
-      const singleGame = singleGames.get(sess.userCode);
-      if (singleGame) {
-        clearTimer(singleGame);
-        clearThankYouTimeout(singleGame);
-        singleGame.status = 'ended';
-        singleGames.delete(sess.userCode);
+    const room = rooms.get(sess.roomId);
+    if (room?.game && room.game.status === 'playing') {
+      if (sess.userCode !== room.createdBy) return; // 방장만 게임 전체 중단 가능
+      clearTimer(room.game);
+      clearThankYouTimeout(room.game);
+      room.game.status = 'ended';
+      for (const p of room.game.players) {
+        if (!p.isAI) emitToPlayer(p.userCode, 'gameStopped', {});
       }
-      socket.emit('gameStopped', {});
+      room.game = null;
+      rooms.delete(room.id);
+      broadcastRoomList();
       return;
     }
 
-    if (activeGame) {
-      clearTimer(activeGame);
-      clearThankYouTimeout(activeGame);
-      activeGame.status = 'ended';
-      for (const p of activeGame.players) {
-        if (!p.isAI) emitToPlayer(p.userCode, 'gameStopped', {});
-      }
-      activeGame = null;
-      waitingRoom.clear();
-    } else {
-      // 싱글모드: 어드민 본인의 싱글 게임 중단
-      const singleGame = singleGames.get(sess.userCode);
-      if (singleGame) {
-        clearTimer(singleGame);
-        clearThankYouTimeout(singleGame);
-        singleGame.status = 'ended';
-        singleGames.delete(sess.userCode);
-      }
-      socket.emit('gameStopped', {});
+    // 방 게임이 아니면: 본인의 싱글 게임 중단
+    const singleGame = singleGames.get(sess.userCode);
+    if (singleGame) {
+      clearTimer(singleGame);
+      clearThankYouTimeout(singleGame);
+      singleGame.status = 'ended';
+      singleGames.delete(sess.userCode);
     }
+    socket.emit('gameStopped', {});
   });
 
   socket.on('draw', ({ source }) => {
@@ -1221,32 +1384,30 @@ io.on('connection', (socket) => {
   socket.on('playAgain', async () => {
     const sess = sessions.get(socket.id);
     if (!sess) return;
-    const me = await db.getUser(sess.userCode);
-    if (!me?.isAdmin) return;
-    if (!lastMultiGamePlayers || activeGame) return;
+    const room = rooms.get(sess.roomId);
+    if (!room || !room.lastGamePlayers || room.game) return;
 
     // 오프라인 플레이어 확인
-    const offlinePlayers = lastMultiGamePlayers.filter(p => !p.isAI && !getSocketId(p.userCode));
+    const offlinePlayers = room.lastGamePlayers.filter(p => !p.isAI && !getSocketId(p.userCode));
     if (offlinePlayers.length > 0) {
       const names = offlinePlayers.map(p => p.userName).join(', ');
-      socket.emit('playAgainError', `${names}님이 나갔습니다. 메뉴로 돌아갑니다.`);
-      for (const p of lastMultiGamePlayers) {
+      for (const p of room.lastGamePlayers) {
         if (!p.isAI) emitToPlayer(p.userCode, 'playAgainError', `${names}님이 나갔습니다. 메뉴로 돌아갑니다.`);
       }
       return;
     }
 
     // 준비 안 된 사람 있으면 막기 (클라이언트 버튼도 막혀있지만 서버에서 재검증)
-    if (readyPhase && readyPhase.requiredCodes.size > 0) {
-      const notReady = [...readyPhase.requiredCodes].some(c => !readyPhase.readyCodes.has(c));
+    if (room.readyPhase && room.readyPhase.requiredCodes.size > 0) {
+      const notReady = [...room.readyPhase.requiredCodes].some(c => !room.readyPhase.readyCodes.has(c));
       if (notReady) return;
     }
-    clearReadyPhase();
+    clearReadyPhase(room);
 
     // 승자 먼저, 나머지 이전 순서 유지
-    let players = [...lastMultiGamePlayers];
-    if (lastMultiGameWinnerCode) {
-      const winnerIdx = players.findIndex(p => p.userCode === lastMultiGameWinnerCode);
+    let players = [...room.lastGamePlayers];
+    if (room.lastGameWinnerCode) {
+      const winnerIdx = players.findIndex(p => p.userCode === room.lastGameWinnerCode);
       if (winnerIdx > 0) players = [...players.slice(winnerIdx), ...players.slice(0, winnerIdx)];
     }
 
@@ -1257,16 +1418,18 @@ io.on('connection', (socket) => {
       return { ...p, multiBalance: u?.multiBalance ?? 0 };
     }));
 
-    activeGame = createGame('multi', players);
-    await snapshotRank1(activeGame);
-    waitingRoom.clear();
+    room.game = createGame('multi', players);
+    room.game.roomId = room.id;
+    room.game.hostCode = room.createdBy;
+    await snapshotRank1(room.game);
+    broadcastRoomList();
 
-    for (const p of activeGame.players) {
-      if (!p.isAI) emitToPlayer(p.userCode, 'gameState', getPublicState(activeGame, p.userCode));
+    for (const p of room.game.players) {
+      if (!p.isAI) emitToPlayer(p.userCode, 'gameState', getPublicState(room.game, p.userCode));
     }
 
-    const cur = getCurrentPlayer(activeGame);
-    startInitialTurn(activeGame, cur, 2000 + Math.random() * 1000);
+    const cur = getCurrentPlayer(room.game);
+    startInitialTurn(room.game, cur, 2000 + Math.random() * 1000);
   });
 
   socket.on('readyForNextGame', () => {
@@ -1399,31 +1562,25 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('leaveWaiting', () => {
-    const sess = sessions.get(socket.id);
-    if (sess) {
-      waitingRoom.delete(sess.userCode);
-      socket.leave('waiting');
-    }
-  });
-
   socket.on('disconnect', async () => {
     const sess = sessions.get(socket.id);
     if (sess) {
-      waitingRoom.delete(sess.userCode);
+      const room = rooms.get(sess.roomId);
+      if (room && !(room.game && room.game.status === 'playing')) {
+        // 게임 시작 전 대기 중 연결이 끊기면 방에서 빠짐
+        removeMemberFromRoom(room, sess.userCode);
+      }
       presenceVisible.delete(sess.userCode);
       broadcastPresence();
       // 대기 중이던 초대 정리: 내가 보낸 초대는 취소, 나한테 온 초대는 상대에게 취소 알림
-      const sentInvite = pendingInvites.get(sess.userCode);
-      if (sentInvite) {
-        pendingInvites.delete(sess.userCode);
-        resumeIfInvitePaused(sentInvite.toCode);
-        emitToPlayer(sentInvite.toCode, 'inviteCancelled', {});
-      }
-      for (const [fromCode, inv] of pendingInvites) {
-        if (inv.toCode === sess.userCode) {
-          pendingInvites.delete(fromCode);
-          emitToPlayer(fromCode, 'inviteCancelled', {});
+      for (const [key, inv] of [...pendingInvites]) {
+        if (inv.fromCode === sess.userCode) {
+          pendingInvites.delete(key);
+          resumeIfInvitePaused(inv.toCode);
+          emitToPlayer(inv.toCode, 'inviteCancelled', {});
+        } else if (inv.toCode === sess.userCode) {
+          pendingInvites.delete(key);
+          emitToPlayer(inv.fromCode, 'inviteCancelled', {});
         }
       }
       // 싱글모드: 뒤로가기/탭닫기/네트워크끊김 등으로 연결이 끊기면 카드가 계속
@@ -1435,24 +1592,25 @@ io.on('connection', (socket) => {
         clearTimer(singleGame);
         clearThankYouTimeout(singleGame);
       }
-      if (activeGame) {
-        const disc = activeGame.players.find(p => p.userCode === sess.userCode);
+      if (room?.game && room.game.status === 'playing') {
+        const game = room.game;
+        const disc = game.players.find(p => p.userCode === sess.userCode);
         if (disc) {
           disc.isAI = true;
           // 연결 끊긴 플레이어가 현재 차례면 타이머 취소 후 AI 턴 실행
-          if (getCurrentPlayer(activeGame)?.userCode === sess.userCode) {
-            clearTimer(activeGame);
+          if (getCurrentPlayer(game)?.userCode === sess.userCode) {
+            clearTimer(game);
             setTimeout(() => {
-              if (activeGame?.status === 'playing' && getCurrentPlayer(activeGame)?.userCode === sess.userCode) {
-                runAITurn(activeGame, disc);
+              if (game.status === 'playing' && getCurrentPlayer(game)?.userCode === sess.userCode) {
+                runAITurn(game, disc);
               }
             }, 3000);
           }
           // 재접속 타이밍에 isAI=true로 AI 턴이 실행되지 않도록 짧은 딜레이 후 체크
           setTimeout(() => {
-            const stillDisc = activeGame?.players.find(p => p.userCode === sess.userCode);
+            const stillDisc = game.players.find(p => p.userCode === sess.userCode);
             if (!stillDisc || !stillDisc.isAI) return; // 이미 재접속됨
-            const stillHuman = activeGame.players.filter(p => !p.isAI);
+            const stillHuman = game.players.filter(p => !p.isAI);
             if (stillHuman.length <= 1) {
               for (const p of stillHuman) emitToPlayer(p.userCode, 'canStop', {});
             }
@@ -1464,7 +1622,9 @@ io.on('connection', (socket) => {
   });
 
   function getPlayerGame(userCode) {
-    if (activeGame?.players.some(p => p.userCode === userCode)) return activeGame;
+    for (const room of rooms.values()) {
+      if (room.game?.players.some(p => p.userCode === userCode)) return room.game;
+    }
     if (singleGames.has(userCode)) return singleGames.get(userCode);
     return null;
   }

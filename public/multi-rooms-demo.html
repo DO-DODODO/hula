@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>멀티 방 시스템 시안</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body {
+      background: #0b2a18;
+      min-height: 100vh;
+      display: flex; flex-wrap: wrap; gap: 32px;
+      justify-content: center; align-items: flex-start;
+      padding: 32px;
+      font-family: 'Malgun Gothic', sans-serif;
+    }
+    .phone-box { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .phone-label { color: #c9a84c; font-size: 13px; font-weight: bold; }
+    .phone {
+      width: 360px; height: 720px;
+      background: var(--green-dark);
+      border-radius: 32px;
+      border: 6px solid #111;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+    }
+    .phone-inner { width: 100%; height: 100%; position: relative; display: flex; flex-direction: column; }
+
+    /* ── 방 목록 화면 ── */
+    .room-list { display: flex; flex-direction: column; gap: 8px; padding: 0 18px 18px; overflow-y: auto; }
+    .room-row {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px; padding: 13px 14px; cursor: pointer;
+    }
+    .room-row .lock { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+    .room-row .rname { flex: 1; font-size: 14px; font-weight: 700; color: var(--text-light); }
+    .room-row .rcount { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .room-row.full { opacity: 0.5; cursor: not-allowed; }
+    .lobby-actions { display: flex; gap: 8px; padding: 0 18px 16px; }
+    .lobby-actions .btn-primary, .lobby-actions .btn-outline { flex: 1; margin-top: 0; padding: 12px 0; font-size: 14px; }
+    .empty-rooms { text-align: center; color: var(--text-dim); font-size: 12.5px; padding: 30px 10px; }
+
+    /* ── 방 만들기 모달 ── */
+    .modal-overlay-demo {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center; z-index: 50;
+    }
+    .invite-pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+    .invite-pick-row {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px;
+    }
+    .invite-pick-row.disabled { opacity: 0.35; }
+    .invite-pick-row .nm { flex: 1; font-size: 13px; color: var(--text-light); }
+    .chk { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,0.3); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+    .chk.checked { background: var(--gold); border-color: var(--gold); color: #1e1e1e; font-weight: 900; }
+
+    /* ── 방 대기실 ── */
+    .room-waiting-head { padding: 4px 4px 10px; text-align: center; }
+    .room-waiting-head .rtitle { font-size: 17px; font-weight: 800; color: var(--text-light); }
+    .room-waiting-head .rcode { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }
+
+    /* ── 랭킹 초대 토글 ── */
+    .prow.invite-mode { padding-left: 6px; }
+    .prank-check { width: 22px; flex-shrink: 0; }
+
+    /* ── 하단 안내 ── */
+    .note { color: var(--text-dim); font-size: 11px; text-align: center; max-width: 360px; }
+  </style>
+</head>
+<body>
+
+  <!-- 1. 멀티 로비 -->
+  <div class="phone-box">
+    <div class="phone-label">1. 멀티 로비 (방 목록)</div>
+    <div class="phone">
+      <div class="phone-inner">
+        <div class="v2-topbar">
+          <button class="back-circle">←</button>
+          <h2>멀티모드</h2>
+        </div>
+        <div class="lobby-actions">
+          <button class="btn-primary">+ 방 만들기</button>
+        </div>
+        <div class="room-list">
+          <div class="room-row">
+            <span class="lock"></span>
+            <span class="rname">철수의 방</span>
+            <span class="rcount">2/4</span>
+          </div>
+          <div class="room-row">
+            <span class="lock">🔒</span>
+            <span class="rname">영희의 방</span>
+            <span class="rcount">1/4</span>
+          </div>
+          <div class="room-row full">
+            <span class="lock"></span>
+            <span class="rname">민수의 방</span>
+            <span class="rcount">4/4 (가득 참)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">🔒 표시된 방은 선택 시 코드 입력을 요구함</div>
+  </div>
+
+  <!-- 2. 방 만들기 모달 -->
+  <div class="phone-box">
+    <div class="phone-label">2. 방 만들기</div>
+    <div class="phone">
+      <div class="phone-inner">
+        <div class="v2-topbar">
+          <button class="back-circle">←</button>
+          <h2>멀티모드</h2>
+        </div>
+        <div class="room-list">
+          <div class="room-row"><span class="lock"></span><span class="rname">철수의 방</span><span class="rcount">2/4</span></div>
+        </div>
+        <div class="modal-overlay-demo">
+          <div class="modal-box large">
+            <h3>방 만들기</h3>
+            <div>
+              <label class="field-label">방 제목</label>
+              <input type="text" class="txt-input" placeholder="예: 저녁에 훌라 한판" maxlength="20">
+            </div>
+            <div>
+              <label class="field-label">방 코드 (선택, 비우면 코드 없이 목록에서만 입장)</label>
+              <input type="text" class="txt-input" placeholder="비워도 됩니다" maxlength="10">
+            </div>
+            <div>
+              <label class="field-label">초대할 사람 (선택, 최대 3명)</label>
+              <div class="invite-pick-list">
+                <div class="invite-pick-row"><span class="chk checked">✓</span><span class="nm">영희 🟢</span></div>
+                <div class="invite-pick-row"><span class="chk">&nbsp;</span><span class="nm">민수 🟢</span></div>
+                <div class="invite-pick-row disabled"><span class="chk">&nbsp;</span><span class="nm">지현 (다른 방 참여중)</span></div>
+              </div>
+            </div>
+            <button class="btn-primary">만들기</button>
+            <button class="btn-secondary">취소</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">코드 비우면 잠금 없는 공개방, 초대는 선택사항(건너뛰기 가능)</div>
+  </div>
+
+  <!-- 3. 방 대기실 -->
+  <div class="phone-box">
+    <div class="phone-label">3. 방 대기실</div>
+    <div class="phone">
+      <div class="phone-inner" style="align-items:center; justify-content:center;">
+        <div class="waiting-box" style="width:88%;">
+          <div class="room-waiting-head">
+            <div class="rtitle">철수의 방</div>
+            <div class="rcode">코드: A3F9</div>
+          </div>
+          <div class="waiting-players">
+            <div class="waiting-player">🧑 철수</div>
+            <div class="waiting-player">🧑 영희</div>
+          </div>
+          <div style="font-size:12.5px;color:var(--text-dim);text-align:center;">2/4명 대기 중</div>
+          <button class="btn-outline">+ 초대하기</button>
+          <button class="btn-primary">게임 시작</button>
+          <button class="btn-secondary">나가기</button>
+        </div>
+      </div>
+    </div>
+    <div class="note">"게임 시작"은 admin 제한 없이 2명 이상이면 누구나 활성화</div>
+  </div>
+
+  <!-- 4. 랭킹 - 평소 vs 초대모드 -->
+  <div class="phone-box">
+    <div class="phone-label">4-A. 랭킹 (평소)</div>
+    <div class="phone">
+      <div class="phone-inner">
+        <div class="v2-topbar">
+          <button class="back-circle">←</button>
+          <h2>랭킹</h2>
+          <button class="btn-outline" style="margin:0 0 0 auto;width:auto;padding:8px 14px;">초대</button>
+        </div>
+        <div class="v2-tabs">
+          <button class="v2-tab active">싱글</button>
+          <button class="v2-tab">멀티</button>
+          <button class="v2-tab">훌라</button>
+        </div>
+        <div class="v2-ranking-list">
+          <div class="prow rank1">
+            <div class="prank">1</div>
+            <div class="pav-wrap"><div class="pav">🧑</div></div>
+            <div class="pbody"><div class="pname-row"><span class="pname">철수</span></div></div>
+            <div class="pvalue"><div class="amt">32,000</div></div>
+          </div>
+          <div class="prow">
+            <div class="prank">2</div>
+            <div class="pav-wrap"><div class="pav">🧑</div></div>
+            <div class="pbody"><div class="pname-row"><span class="pname">영희</span></div></div>
+            <div class="pvalue"><div class="amt">18,500</div></div>
+          </div>
+          <div class="prow">
+            <div class="prank">3</div>
+            <div class="pav-wrap"><div class="pav">🧑</div></div>
+            <div class="pbody"><div class="pname-row"><span class="pname">민수</span></div></div>
+            <div class="pvalue"><div class="amt">9,200</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone-box">
+    <div class="phone-label">4-B. 랭킹 (초대 모드)</div>
+    <div class="phone">
+      <div class="phone-inner">
+        <div class="v2-topbar">
+          <button class="back-circle">←</button>
+          <h2>랭킹</h2>
+          <button class="btn-secondary" style="margin:0 0 0 auto;width:auto;padding:8px 14px;">취소</button>
+        </div>
+        <div class="v2-ranking-list">
+          <div class="prow invite-mode">
+            <div class="prank-check"><span class="chk checked">✓</span></div>
+            <div class="pav-wrap"><div class="pav">🧑</div></div>
+            <div class="pbody"><div class="pname-row"><span class="pname">철수</span></div></div>
+          </div>
+          <div class="prow invite-mode">
+            <div class="prank-check"><span class="chk">&nbsp;</span></div>
+            <div class="pav-wrap"><div class="pav">🧑</div></div>
+            <div class="pbody"><div class="pname-row"><span class="pname">영희</span></div></div>
+          </div>
+          <div class="prow invite-mode" style="opacity:0.4;">
+            <div class="prank-check">⚪</div>
+            <div class="pav-wrap"><div class="pav">🧑</div></div>
+            <div class="pbody"><div class="pname-row"><span class="pname">민수 (오프라인)</span></div></div>
+          </div>
+        </div>
+        <div style="padding:0 18px 18px;">
+          <button class="btn-primary" style="width:100%;">초대 보내기 (1)</button>
+        </div>
+      </div>
+    </div>
+    <div class="note">순위 숫자 자리가 체크박스로 토글, 오프라인은 비활성</div>
+  </div>
+
+  <!-- 5. 전역 초대 알림 -->
+  <div class="phone-box">
+    <div class="phone-label">5. 받은 초대 알림 (전역)</div>
+    <div class="phone">
+      <div class="phone-inner" style="align-items:center;justify-content:center;background:rgba(0,0,0,0.6);">
+        <div id="presence-invite-card">
+          <div class="bell">🔔</div>
+          <div class="from">영희님이 초대했어요</div>
+          <div class="msg">철수의 방</div>
+          <div class="btns">
+            <button class="btn-gold">수락</button>
+            <button class="btn-ghost">거절</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">기존 presence-invite-card 스타일 그대로 재사용, 어느 화면 위에서든 뜸</div>
+  </div>
+
+</body>
+</html>

@@ -37,9 +37,11 @@
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 2200);
   }
+  window.presenceToast = presenceToast;
 
-  // ── 대기 pill (초대 보낸 사람) ─────────────────────────────────────────
+  // ── 대기 pill (초대 보낸 사람, 여러 명 동시 초대 지원) ───────────────────
   window.presencePending = false;
+  const pendingSent = new Map(); // targetCode → name
   let pillEl = null;
   function ensurePill() {
     if (pillEl) return pillEl;
@@ -48,14 +50,18 @@
     document.body.appendChild(pillEl);
     return pillEl;
   }
-  function showPendingPill(name) {
+  function refreshPill() {
+    if (pendingSent.size === 0) { hidePill(); return; }
     const el = ensurePill();
     el.className = '';
-    el.innerHTML = `<span>🔔 ${name}님에게 초대 보냄 · 대기중</span><span class="cancel" id="presence-cancel-btn">✕</span>`;
+    const names = [...pendingSent.values()].join(', ');
+    el.innerHTML = `<span>🔔 ${names}님에게 초대 보냄 · 대기중</span><span class="cancel" id="presence-cancel-btn">✕</span>`;
     document.getElementById('presence-cancel-btn').onclick = () => {
       socket.emit('cancelInvite');
+      pendingSent.clear();
       hidePill();
     };
+    window.presencePending = true;
   }
   function showResultPill(text, ok) {
     const el = ensurePill();
@@ -65,21 +71,23 @@
   }
   function hidePill() {
     if (pillEl) { pillEl.remove(); pillEl = null; }
-    window.presencePending = false;
+    window.presencePending = pendingSent.size > 0;
   }
 
-  socket.on('inviteSent', ({ toName }) => {
-    window.presencePending = true;
-    showPendingPill(toName);
+  socket.on('inviteSent', ({ toCode, toName }) => {
+    pendingSent.set(toCode, toName);
+    refreshPill();
   });
   socket.on('inviteError', (msg) => {
-    window.presencePending = false;
-    hidePill();
     alert(msg);
   });
   socket.on('inviteDeclined', ({ byName }) => {
-    window.presencePending = false;
+    for (const [code, name] of pendingSent) if (name === byName) pendingSent.delete(code);
+    refreshPill();
     showResultPill(`🙅 ${byName}님이 초대를 거절했어요`, false);
+  });
+  socket.on('inviteResponded', ({ accepted, byName }) => {
+    if (accepted) showResultPill(`✅ ${byName}님이 수락했어요`, true);
   });
 
   // ── 초대 수신 레이어 (받는 사람) ───────────────────────────────────────
@@ -92,7 +100,7 @@
       <div id="presence-invite-card">
         <div class="bell">🔔</div>
         <div class="from" id="presence-invite-from"></div>
-        <div class="msg">멀티모드 같이 하자!</div>
+        <div class="msg" id="presence-invite-msg">멀티모드 같이 하자!</div>
         <div class="btns">
           <button class="btn-gold" id="presence-invite-accept">수락</button>
           <button class="btn-ghost" id="presence-invite-decline">거절</button>
@@ -104,35 +112,42 @@
     document.getElementById('presence-invite-decline').onclick = () => respondInvite(false);
     return overlayEl;
   }
+  let pendingFromCode = null;
   function respondInvite(accept) {
-    socket.emit('respondInvite', { accept });
+    socket.emit('respondInvite', { accept, fromCode: pendingFromCode });
     overlayEl?.classList.remove('show');
   }
-  socket.on('inviteReceived', ({ fromName, fromAvatar }) => {
+  socket.on('inviteReceived', ({ fromCode, fromName, fromAvatar, roomTitle }) => {
+    pendingFromCode = fromCode;
     ensureOverlay();
     const emoji = PRESENCE_AVATAR_MAP[fromAvatar] || '👤';
     document.getElementById('presence-invite-from').innerHTML = `<span>${emoji}</span>${fromName}님`;
+    document.getElementById('presence-invite-msg').textContent = roomTitle ? `"${roomTitle}"에 초대` : '멀티모드 같이 하자!';
     overlayEl.classList.add('show');
   });
   socket.on('inviteCancelled', () => {
     overlayEl?.classList.remove('show');
   });
 
-  // ── 수락 처리: 양쪽 다 같은 방식으로 대기실 입장 ──────────────────────────
-  socket.on('inviteResponded', ({ accepted, byName }) => {
-    if (accepted) showResultPill(`✅ ${byName}님이 수락했어요`, true);
-  });
-  socket.on('inviteAccepted', () => {
-    hidePill();
+  // ── 수락 처리: 보낸 사람(sender)은 이미 방에 있어 UI만 정리,
+  //    받은 사람(receiver)만 실제로 방에 입장(joinRoomViaInvite) ───────────
+  socket.on('inviteAccepted', ({ role, byName }) => {
+    if (role === 'sender') {
+      const name = byName;
+      for (const [code, n] of pendingSent) if (n === name) pendingSent.delete(code);
+      refreshPill();
+      return;
+    }
+    // role === 'receiver'
     overlayEl?.classList.remove('show');
     presenceToast('방으로 이동합니다...');
     setTimeout(() => {
       if (location.pathname.indexOf('game.html') !== -1) {
-        sessionStorage.setItem('autoJoinWaiting', '1');
+        sessionStorage.setItem('autoJoinRoom', '1');
         socket.disconnect();
         location.href = '/';
       } else {
-        socket.emit('joinWaitingViaInvite');
+        socket.emit('joinRoomViaInvite');
       }
     }, 700);
   });

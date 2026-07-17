@@ -98,7 +98,34 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 /* Entry, Waiting, Settings, Ranking, Help boxes */
 .entry-box, .waiting-box, .settings-box, .ranking-box, .help-box { background: rgba(0,0,0,0.7); border-radius: 12px; padding: 28px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 300px; max-width: 90vw; color: #fff; max-height: 90vh; overflow-y: auto; }
 .waiting-players { display: flex; flex-direction: column; gap: 8px; }
-.waiting-player { padding: 8px 12px; background: rgba(255,255,255,0.1); border-radius: 6px; }
+.waiting-player { padding: 8px 12px; background: rgba(255,255,255,0.1); border-radius: 6px; display: flex; align-items: center; gap: 6px; }
+.waiting-player .kick-x { margin-left: auto; color: #ff6b5e; cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 50%; }
+.waiting-player .kick-x:hover { background: rgba(255,107,94,0.15); }
+.room-waiting-head { text-align: center; }
+.room-waiting-head .rtitle { font-size: 17px; font-weight: 800; color: var(--text-light); }
+.room-waiting-head .rcode { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }
+
+/* ── 멀티 로비 (방 목록) ─────────────────────────────────────────────── */
+.lobby-box { background: rgba(0,0,0,0.7); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 300px; max-width: 90vw; width: 340px; color: #fff; max-height: 90vh; }
+.lobby-actions { display: flex; gap: 8px; }
+.lobby-actions .btn-primary, .lobby-actions .btn-outline { flex: 1; margin-top: 0; padding: 12px 0; font-size: 14px; }
+.room-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 50vh; }
+.room-row { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 13px 14px; cursor: pointer; }
+.room-row:active { background: rgba(201,168,76,0.14); }
+.room-row .lock { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+.room-row .rname { flex: 1; font-size: 14px; font-weight: 700; color: var(--text-light); }
+.room-row .rcount { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.room-row.full { opacity: 0.5; cursor: not-allowed; }
+.empty-rooms { text-align: center; color: var(--text-dim); font-size: 12.5px; padding: 24px 10px; }
+
+/* ── 초대 대상 선택 (방 만들기 모달, 랭킹 초대 토글 공용) ─────────────── */
+.invite-pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+.invite-pick-row { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.invite-pick-row.disabled { opacity: 0.35; cursor: not-allowed; }
+.invite-pick-row .nm { flex: 1; font-size: 13px; color: var(--text-light); }
+.chk { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,0.3); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.chk.checked { background: var(--gold); border-color: var(--gold); color: #1e1e1e; font-weight: 900; }
+.prank-check { width: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .setting-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .setting-row label { color: var(--text-dim); min-width: 80px; }
 .settings-section-head { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); margin-top: -4px; }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라</title>
-  <link rel="stylesheet" href="css/style.css?v=18">
+  <link rel="stylesheet" href="css/style.css?v=20">
 </head>
 <body>
   <div id="network-banner">🔌 연결이 끊겼습니다. 재연결 중...</div>
@@ -61,26 +61,67 @@
     </div>
   </div>
 
-  <!-- Multi Entry Screen -->
-  <div id="screen-multi-entry" class="screen">
-    <div class="entry-box">
-      <h2>멀티모드 입장</h2>
-      <input type="text" id="input-entrycode" placeholder="입장 코드" maxlength="20">
-      <button id="btn-enter-multi" class="btn-primary">입장</button>
-      <button id="btn-back-multi" class="btn-secondary">뒤로</button>
-      <div id="entry-error" class="error-msg"></div>
+
+  <!-- Multi Lobby Screen (방 목록) -->
+  <div id="screen-multi-lobby" class="screen">
+    <div class="lobby-box">
+      <div class="v2-topbar" style="padding:0 0 4px">
+        <button id="btn-back-lobby" class="back-circle" aria-label="뒤로">←</button>
+        <h2>멀티모드</h2>
+      </div>
+      <div class="lobby-actions">
+        <button id="btn-open-create-room" class="btn-primary">+ 방 만들기</button>
+      </div>
+      <div id="room-list" class="room-list"></div>
+    </div>
+  </div>
+
+  <!-- Create Room Modal -->
+  <div id="modal-create-room" class="modal" style="display:none">
+    <div class="modal-box large">
+      <h3>방 만들기</h3>
+      <div>
+        <label class="field-label">방 제목</label>
+        <input type="text" id="input-room-title" class="txt-input" maxlength="20">
+      </div>
+      <div>
+        <label class="field-label">방 코드 (선택, 비우면 잠금 없는 공개방)</label>
+        <input type="text" id="input-room-code" class="txt-input" placeholder="비워도 됩니다" maxlength="10">
+      </div>
+      <div>
+        <label class="field-label">초대할 사람 (선택, 최대 3명)</label>
+        <div id="create-room-invite-list" class="invite-pick-list"></div>
+      </div>
+      <div id="create-room-error" class="error-msg"></div>
+      <button id="btn-submit-create-room" class="btn-primary">만들기</button>
+      <button id="btn-cancel-create-room" class="btn-secondary">취소</button>
+    </div>
+  </div>
+
+  <!-- Room Code Prompt Modal -->
+  <div id="modal-room-code" class="modal" style="display:none">
+    <div class="modal-box">
+      <h3 id="room-code-title">코드 입력</h3>
+      <input type="text" id="input-join-room-code" placeholder="방 코드" maxlength="10">
+      <button id="btn-submit-room-code" class="btn-primary">입장</button>
+      <button id="btn-cancel-room-code" class="btn-secondary">취소</button>
+      <div id="room-code-error" class="error-msg"></div>
     </div>
   </div>
 
   <!-- Waiting Room Screen -->
   <div id="screen-waiting" class="screen">
     <div class="waiting-box">
-      <h2>대기 중...</h2>
-      <div id="waiting-players" class="waiting-players"></div>
-      <div id="admin-start-area" style="display:none">
-        <button id="btn-admin-start" class="btn-primary">게임 시작</button>
-        <div id="admin-start-error" class="error-msg"></div>
+      <div class="room-waiting-head">
+        <div id="waiting-room-title" class="rtitle"></div>
+        <div id="waiting-room-code" class="rcode"></div>
       </div>
+      <div id="waiting-players" class="waiting-players"></div>
+      <button id="btn-invite-in-room" class="btn-outline">+ 초대하기</button>
+      <div id="invite-in-room-list" class="invite-pick-list" style="display:none"></div>
+      <button id="btn-mark-ready" class="btn-primary" style="display:none">준비 완료</button>
+      <button id="btn-start-room-game" class="btn-primary" style="display:none">게임 시작</button>
+      <div id="room-start-error" class="error-msg"></div>
       <button id="btn-leave-waiting" class="btn-secondary">나가기</button>
     </div>
   </div>
@@ -141,9 +182,6 @@
 
         <div id="admin-settings" class="v2-card admin" style="display:none">
           <div class="admin-head">⚙ 관리자 메뉴</div>
-          <label class="field-label">입장 코드</label>
-          <input type="text" id="input-entry-code" class="txt-input" maxlength="20">
-          <button id="btn-save-entry-code" class="btn-save" style="margin-top:10px">변경</button>
           <button id="btn-manage-users" class="btn-outline">유저 관리</button>
         </div>
         <div id="admin-login-area">
@@ -188,7 +226,7 @@
         <button id="btn-back-ranking" class="back-circle" aria-label="뒤로">←</button>
         <h2>랭킹</h2>
       </div>
-      <div class="v2-tabs">
+      <div id="ranking-tabs" class="v2-tabs">
         <button id="tab-single" class="v2-tab active">싱글</button>
         <button id="tab-multi" class="v2-tab">멀티</button>
         <button id="tab-hula" class="v2-tab">훌라</button>
@@ -202,7 +240,7 @@
     <div class="settings-box-v2">
       <div class="v2-topbar">
         <button id="btn-back-mystats" class="back-circle" aria-label="뒤로">←</button>
-        <h2>내 통계</h2>
+        <h2>통계</h2>
       </div>
       <div class="v2-tabs">
         <button id="mystats-tab-me" class="v2-tab active">나</button>
@@ -272,7 +310,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/main.js?v=11"></script>
-  <script src="js/presence.js?v=1"></script>
+  <script src="js/main.js?v=14"></script>
+  <script src="js/presence.js?v=2"></script>
 </body>
 </html>

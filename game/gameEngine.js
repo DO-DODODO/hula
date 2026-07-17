@@ -91,7 +91,8 @@ function getPublicState(game, viewerCode = null) {
     thankYouTaker: game.thankYouTaker,
     firstTurn: game.firstTurn,
     timerRemainingMs: game.timerRemainingMs ?? null,
-    isDoubleEvent: !!game.isDoubleEvent
+    isDoubleEvent: !!game.isDoubleEvent,
+    hostCode: game.hostCode ?? null
   };
 }
 
