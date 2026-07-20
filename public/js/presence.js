@@ -21,8 +21,10 @@
       hiddenTimer = setTimeout(() => { hiddenTimer = null; sendPresence(false); }, 10000);
     }
   });
-  socket.on('connect', () => { if (document.visibilityState === 'visible') sendPresence(true); });
-  socket.on('loginSuccess', () => { if (document.visibilityState === 'visible') sendPresence(true); });
+  // 접속/로그인 시점엔 document.visibilityState가 아직 불안정할 수 있어 체크 없이 무조건 전송.
+  // 실제로 탭이 숨겨진 상태라면 뒤이어 visibilitychange가 정확한 값으로 다시 처리해준다.
+  socket.on('connect', () => { sendPresence(true); });
+  socket.on('loginSuccess', () => { sendPresence(true); });
 
   // ── 작은 토스트 (main.js/game.js 각자의 알림 UI에 안 얹고 독립적으로 뜸) ──
   function presenceToast(msg) {
