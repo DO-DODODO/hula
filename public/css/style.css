@@ -429,8 +429,14 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 }
 .portal-card.red { color: var(--card-red); }
 .portal-card.black { color: var(--card-black); }
-.portal-card .card-inner span:first-child { font-size: clamp(16px, 2.2vw, 30px); }
-.portal-card .card-suit { font-size: clamp(18px, 2.4vw, 34px); }
+.portal-card .card-inner {
+  position: absolute;
+  top: 4px; left: 5px;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+.portal-card .card-inner span:first-child { font-size: clamp(14px, 1.8vw, 22px); }
+.portal-card .card-suit { font-size: clamp(15px, 1.9vw, 24px); }
 
 .card {
   width: clamp(44px, 5vw, 70px);
