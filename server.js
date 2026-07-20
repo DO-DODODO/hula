@@ -56,6 +56,12 @@ function broadcastGame(game) {
       emitToPlayer(p.userCode, 'gameState', getPublicState(game, p.userCode));
     }
   }
+  const room = rooms.get(game.roomId);
+  if (room) {
+    for (const uc of room.waiters) {
+      emitToPlayer(uc, 'gameState', getPublicState(game, uc));
+    }
+  }
 }
 
 // ── 방(room) 헬퍼 ────────────────────────────────────────────────────────────
@@ -68,6 +74,7 @@ function genRoomId() { return `room_${roomIdCounter++}`; }
 function findRoomOfUser(userCode) {
   for (const room of rooms.values()) {
     if (room.members.has(userCode)) return room;
+    if (room.waiters.has(userCode)) return room;
     if (room.game?.players.some(p => p.userCode === userCode)) return room;
     // 게임 종료 후 "한 판 더" 준비 단계: members도 비어있고 game도 null이라 lastGamePlayers로도 찾아야 함
     if (room.lastGamePlayers?.some(p => p.userCode === userCode)) return room;
@@ -80,6 +87,7 @@ function findRoomOfUser(userCode) {
 function isAvailableForRoom(userCode) {
   for (const room of rooms.values()) {
     if (room.members.has(userCode)) return false;
+    if (room.waiters.has(userCode)) return false;
     if (room.game?.players.some(p => p.userCode === userCode && !p.isAI)) return false;
   }
   return true;
@@ -87,13 +95,27 @@ function isAvailableForRoom(userCode) {
 
 function roomSummary(room) {
   const playing = !!room.game && room.game.status === 'playing';
+  const humanCount = playing ? room.game.players.filter(p => !p.isAI).length : room.members.size;
   return {
     id: room.id,
     title: room.title,
     locked: !!room.code,
-    memberCount: playing ? room.game.players.filter(p => !p.isAI).length : room.members.size,
+    memberCount: humanCount,
     playing,
+    waitingCount: playing ? room.waiters.size : 0,
+    waitingCap: playing ? Math.max(0, 4 - humanCount) : 0,
   };
+}
+
+// 대기자 전원 이름을 방 참가자(플레이어) + 대기자 모두에게 알림 ("OOO, OOO님 대기중" 뱃지용)
+function broadcastWaiterList(room) {
+  if (!room.game) return;
+  const names = [...room.waiters].map(uc => sessions.get(getSocketId(uc))?.userName).filter(Boolean);
+  const payload = { count: room.waiters.size, names };
+  for (const p of room.game.players) {
+    if (!p.isAI) emitToPlayer(p.userCode, 'waiterList', payload);
+  }
+  for (const uc of room.waiters) emitToPlayer(uc, 'waiterList', payload);
 }
 
 function broadcastRoomList() {
@@ -120,7 +142,7 @@ async function broadcastRoomWaiting(room) {
 // 게임 시작 전, 누구 하나라도 명시적으로 나가면 방 자체를 없앤다 (남은 사람도 로비로 돌아감)
 function closeRoom(room, reason) {
   if (room.readyPhase) { for (const t of room.readyPhase.timers.values()) clearTimeout(t); }
-  for (const uc of room.members) {
+  for (const uc of [...room.members, ...room.waiters]) {
     const sid = getSocketId(uc);
     const s = sid && sessions.get(sid);
     if (s) s.roomId = null;
@@ -136,6 +158,12 @@ function removeMemberFromRoom(room, userCode) {
   const stillHasHumans = room.members.size > 0 || (room.game?.status === 'playing' && room.game.players.some(p => !p.isAI));
   if (!stillHasHumans) {
     if (room.readyPhase) { for (const t of room.readyPhase.timers.values()) clearTimeout(t); }
+    for (const uc of room.waiters) {
+      const sid = getSocketId(uc);
+      const s = sid && sessions.get(sid);
+      if (s) s.roomId = null;
+      emitToPlayer(uc, 'roomClosed', { reason: '방이 사라졌어요' });
+    }
     rooms.delete(room.id);
   }
   broadcastRoomList();
@@ -216,6 +244,22 @@ function broadcastReadyStatus(room) {
   for (const p of room.lastGamePlayers) {
     if (!p.isAI) emitToPlayer(p.userCode, 'readyStatus', payload);
   }
+  for (const uc of room.waiters) emitToPlayer(uc, 'readyStatus', payload);
+}
+
+// 대기자가 준비 시간 내 응답 없으면(기존 멤버와 달리) 자동 준비 처리 대신 대기 자체를 취소
+function dropWaiterOnTimeout(room, userCode) {
+  room.waiters.delete(userCode);
+  if (room.readyPhase) {
+    room.readyPhase.requiredCodes.delete(userCode);
+    room.readyPhase.readyCodes.delete(userCode);
+    room.readyPhase.deadlines.delete(userCode);
+    room.readyPhase.timers.delete(userCode);
+  }
+  emitToPlayer(userCode, 'playAgainError', '준비 시간이 지나 대기가 취소됐습니다.');
+  broadcastWaiterList(room);
+  broadcastRoomList();
+  broadcastReadyStatus(room);
 }
 
 // userCode가 속한 방의 readyPhase에서 준비 완료 표시
@@ -245,14 +289,23 @@ async function startReadyPhase(room) {
     return;
   }
 
-  // 방장은 "다시 시작" 버튼을 직접 누르는 쪽이라 준비 대상에서 제외, 나머지만 준비 확인
-  const requiredCodes = new Set(onlineHumans.filter(p => p.userCode !== room.createdBy).map(p => p.userCode));
+  // 방장은 "다시 시작" 버튼을 직접 누르는 쪽이라 준비 대상에서 제외, 나머지(기존 인원+대기자)는 준비 확인
+  const waiterCodes = [...room.waiters].filter(uc => getSocketId(uc));
+  const requiredCodes = new Set([
+    ...onlineHumans.filter(p => p.userCode !== room.createdBy).map(p => p.userCode),
+    ...waiterCodes.filter(uc => uc !== room.createdBy),
+  ]);
 
   room.readyPhase = { requiredCodes, readyCodes: new Set(), deadlines: new Map(), timers: new Map() };
   const deadline = Date.now() + READY_TIMEOUT_MS;
   for (const code of requiredCodes) {
     room.readyPhase.deadlines.set(code, deadline);
-    room.readyPhase.timers.set(code, setTimeout(() => markReady(code), READY_TIMEOUT_MS));
+    // 원래 있던 인원은 응답 없으면 자동 준비 처리, 대기자는 응답 없으면 자동으로 대기 이탈
+    const isWaiter = room.waiters.has(code);
+    room.readyPhase.timers.set(code, setTimeout(() => {
+      if (isWaiter) dropWaiterOnTimeout(room, code);
+      else markReady(code);
+    }, READY_TIMEOUT_MS));
   }
 
   broadcastReadyStatus(room);
@@ -655,13 +708,17 @@ async function endGame(game, winnerCode) {
   const winnerUser = actualWinnerCode ? await db.getUser(actualWinnerCode) : null;
   const winMessage = winnerUser?.winMessage || null;
 
+  const gameEndPayload = {
+    results, winnerCode: actualWinnerCode, winnerName, winMessage, newRank1, isHula,
+    isDoubleEvent: !!game.isDoubleEvent
+  };
   for (const p of game.players) {
-    if (!p.isAI) {
-      emitToPlayer(p.userCode, 'gameEnd', {
-        results, winnerCode: actualWinnerCode, winnerName, winMessage, newRank1, isHula,
-        isDoubleEvent: !!game.isDoubleEvent
-      });
-    }
+    if (!p.isAI) emitToPlayer(p.userCode, 'gameEnd', gameEndPayload);
+  }
+  // 대기(관전) 중이던 사람들도 결과 화면을 보고 이어서 "준비" 버튼을 누를 수 있어야 함
+  const waiterRoom = rooms.get(game.roomId);
+  if (waiterRoom) {
+    for (const uc of waiterRoom.waiters) emitToPlayer(uc, 'gameEnd', gameEndPayload);
   }
 
   if (game.mode === 'single') {
@@ -732,6 +789,11 @@ io.on('connection', (socket) => {
         if (player) {
           player.isAI = false;
           socket.emit('gameState', getPublicState(myRoom.game, user.userCode));
+          return;
+        }
+        if (myRoom.waiters.has(user.userCode)) {
+          socket.emit('gameState', getPublicState(myRoom.game, user.userCode));
+          socket.emit('spectateOk', { roomId: myRoom.id });
           return;
         }
       } else {
@@ -1023,6 +1085,7 @@ io.on('connection', (socket) => {
       id: genRoomId(), title: trimmedTitle, code: trimmedCode,
       members: new Set([sess.userCode]),
       readyMembers: new Set(), // 방장 제외, 준비 완료한 멤버
+      waiters: new Set(), // 게임 진행 중 들어와 관전하며 다음 판을 기다리는 인원
       game: null, lastGamePlayers: null, lastGameWinnerCode: null, readyPhase: null,
       createdBy: sess.userCode,
     };
@@ -1046,14 +1109,28 @@ io.on('connection', (socket) => {
     if (!isAvailableForRoom(sess.userCode)) { socket.emit('joinMultiError', '이미 다른 방에 참여 중이에요'); return; }
     const room = rooms.get(roomId);
     if (!room) { socket.emit('joinMultiError', '존재하지 않는 방이에요'); return; }
-    if (room.game && room.game.status === 'playing') { socket.emit('joinMultiError', '이미 게임이 진행 중인 방이에요'); return; }
-    if (room.members.size >= 4) { socket.emit('joinMultiError', '방이 꽉 찼습니다 (최대 4명).'); return; }
     if (room.code && room.code !== (code || '').trim()) {
       socket.emit('joinRoomNeedsCode', { roomId: room.id, title: room.title }); return;
     }
     const user = await db.getUser(sess.userCode);
     if (!user || user.multiBalance <= 0) { socket.emit('joinMultiError', '잔액이 없습니다.'); return; }
 
+    // 진행 중인 방: 정원(4명) 안에서만 관전(대기) 입장 허용
+    if (room.game && room.game.status === 'playing') {
+      const currentCount = room.game.players.filter(p => !p.isAI).length;
+      if (currentCount + room.waiters.size >= 4) {
+        socket.emit('joinMultiError', '정원이 찬 방입니다'); return;
+      }
+      room.waiters.add(sess.userCode);
+      sess.roomId = room.id;
+      socket.emit('gameState', getPublicState(room.game, sess.userCode));
+      broadcastWaiterList(room);
+      broadcastRoomList();
+      socket.emit('spectateOk', { roomId: room.id });
+      return;
+    }
+
+    if (room.members.size >= 4) { socket.emit('joinMultiError', '방이 꽉 찼습니다 (최대 4명).'); return; }
     room.members.add(sess.userCode);
     sess.roomId = room.id;
     await broadcastRoomWaiting(room);
@@ -1081,6 +1158,13 @@ io.on('connection', (socket) => {
     const room = rooms.get(sess.roomId);
     sess.roomId = null;
     if (!room) return;
+    // 관전(대기) 중이던 사람이 나가기 — 게임/방 자체엔 영향 없음
+    if (room.waiters.has(sess.userCode)) {
+      room.waiters.delete(sess.userCode);
+      broadcastWaiterList(room);
+      broadcastRoomList();
+      return;
+    }
     room.members.delete(sess.userCode);
     room.readyMembers.delete(sess.userCode);
     // 방장이 나가거나, 나가고 나서 1명 이하만 남으면 방 자체를 없앰
@@ -1411,6 +1495,21 @@ io.on('connection', (socket) => {
       if (winnerIdx > 0) players = [...players.slice(winnerIdx), ...players.slice(0, winnerIdx)];
     }
 
+    // 대기(관전) 중이던 사람들을 AI 자리에 편입
+    const waiterCodes = [...room.waiters].filter(uc => getSocketId(uc));
+    if (waiterCodes.length > 0) {
+      const waiterUsers = (await Promise.all(waiterCodes.map(uc => db.getUser(uc)))).filter(Boolean);
+      let wi = 0;
+      players = players.map(p => {
+        if (p.isAI && wi < waiterUsers.length) {
+          const u = waiterUsers[wi++];
+          return { userCode: u.userCode, userName: u.userName, isAI: false, avatar: u.avatar || 'person', multiBalance: u.multiBalance };
+        }
+        return p;
+      });
+      room.waiters.clear();
+    }
+
     // 멀티 잔액 최신 값 갱신
     players = await Promise.all(players.map(async p => {
       if (p.isAI) return p;
@@ -1569,6 +1668,12 @@ io.on('connection', (socket) => {
       if (room && !(room.game && room.game.status === 'playing')) {
         // 게임 시작 전 대기 중 연결이 끊기면 방에서 빠짐
         removeMemberFromRoom(room, sess.userCode);
+      }
+      // 관전(대기) 중이던 사람은 플레이어와 달리 일시정지 없이 즉시 자리 반납
+      if (room && room.waiters.has(sess.userCode)) {
+        room.waiters.delete(sess.userCode);
+        broadcastWaiterList(room);
+        broadcastRoomList();
       }
       presenceVisible.delete(sess.userCode);
       broadcastPresence();

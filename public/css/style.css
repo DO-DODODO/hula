@@ -13,6 +13,7 @@ button, .pile, .card-slot, .card { touch-action: manipulation; }
   --btn-danger: #c0392b;
   --text-light: #f0f0f0;
   --text-dim: #aaa;
+  --wait: #5aa9e6;
 }
 
 html, body { width: 100%; height: 100%; overflow: hidden; background: var(--green-dark); font-family: 'Malgun Gothic', sans-serif; }
@@ -450,10 +451,6 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 .card-inner span:first-child { font-size: clamp(14px, 1.8vw, 24px); font-weight: bold; }
 .card-suit { font-size: clamp(16px, 2vw, 28px); }
 
-/* 내 패 카드는 더 크게 */
-#my-hand .card-inner span:first-child { font-size: clamp(16px, 2.2vw, 30px); }
-#my-hand .card-suit { font-size: clamp(18px, 2.4vw, 34px); }
-
 /* 조합 영역 카드 */
 .card.small .card-inner span:first-child { font-size: clamp(13px, 1.5vw, 20px); }
 .card.small .card-suit { font-size: clamp(14px, 1.6vw, 22px); }
@@ -468,6 +465,18 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 }
 .card.combo-card .card-inner span:first-child { font-size: clamp(12px, 1.4vw, 18px); }
 .card.combo-card .card-suit { font-size: clamp(13px, 1.5vw, 20px); }
+
+/* ── 내 패 / 버린 더미: 콤보 카드와 동일하게 좌상단 정렬 (겹쳐도 다 보이게) ── */
+#my-hand .card-inner, #discard-card .card-inner {
+  position: absolute;
+  top: 4px; left: 5px;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+#my-hand .card-inner span:first-child { font-size: clamp(14px, 1.8vw, 22px); }
+#my-hand .card-suit { font-size: clamp(15px, 1.9vw, 24px); }
+#discard-card .card-inner span:first-child { font-size: clamp(13px, 1.5vw, 19px); }
+#discard-card .card-suit { font-size: clamp(14px, 1.6vw, 21px); }
 
 /* ── 카드 애니메이션 ─────────────────────────────────────────────────── */
 @keyframes cardSlideIn {
@@ -516,6 +525,42 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
   width: 30px; height: 30px; border-radius: 50%;
   background: url('../img/hand2.png') 50% 41%/180% no-repeat;
 }
+
+/* ── 관전(대기) 모드 ─────────────────────────────────────────────────── */
+/* 진행중인 방에 대기자로 들어왔을 때 화면 테두리를 은은하게 강조 (내 차례 골드 글로우와 안 겹치게 파란색) */
+#game-table.spectating::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  outline: 3px solid var(--wait);
+  box-shadow: inset 0 0 0 3px rgba(90,169,230,0.5), inset 0 0 30px rgba(90,169,230,0.35), 0 0 24px rgba(90,169,230,0.3);
+  animation: waitPulse 2.6s ease-in-out infinite;
+  z-index: 90;
+}
+@keyframes waitPulse { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #game-table.spectating::after { animation: none; } }
+
+/* 대기자 뱃지 - 좌상단 정사각형 카드, 플레이어/대기자 모두에게 노출 */
+#waiter-badge {
+  position: absolute; top: 6px; left: 6px; z-index: 40;
+  width: 78px;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  background: rgba(10,20,25,0.72);
+  border: 1px solid rgba(90,169,230,0.45);
+  border-radius: 14px;
+  padding: 8px 6px;
+}
+#waiter-badge-text { font-size: 10.5px; line-height: 1.35; font-weight: 700; color: #d9ecff; }
+#waiter-badge-text b { color: #fff; }
+
+/* 관전자 패널 - my-area와 같은 자리를 차지 (하단 손패/액션버튼 대체) */
+#spectator-panel {
+  grid-area: my; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 8px; background: rgba(0,0,0,0.25); text-align: center;
+}
+#spectator-seat0 { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#spectator-seat0-name { font-size: 13px; font-weight: 700; color: #fff; }
+#spectator-msg { font-size: 12.5px; font-weight: 700; color: var(--text-dim); }
 
 /* ── My Area ─────────────────────────────────────────────────────────── */
 #my-area { grid-area: my; display: flex; align-items: center; padding: 4px 8px; gap: 6px; background: rgba(0,0,0,0.25); }

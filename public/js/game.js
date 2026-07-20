@@ -204,6 +204,26 @@ socket.on('playAgainError', (msg) => {
   setTimeout(() => { socket.disconnect(); location.href = '/'; }, 3000);
 });
 
+socket.on('roomClosed', ({ reason }) => {
+  showNotif(reason || '방이 사라졌어요', 'info');
+  setTimeout(() => { socket.disconnect(); location.href = '/'; }, 2000);
+});
+
+// 대기(관전) 뱃지: 플레이어/대기자 모두에게 노출 — "OOO, OOO님 대기중"
+socket.on('waiterList', ({ names } = {}) => {
+  const badge = document.getElementById('waiter-badge');
+  if (!badge) return;
+  if (!names || names.length === 0) { badge.style.display = 'none'; return; }
+  badge.style.display = '';
+  document.getElementById('waiter-badge-text').innerHTML = `<b>${names.join(', ')}</b>님 대기중`;
+});
+
+document.getElementById('btn-spectator-leave')?.addEventListener('click', () => {
+  socket.emit('leaveRoom');
+  socket.disconnect();
+  location.href = '/';
+});
+
 socket.on('duplicateLogin', () => {
   socket.disconnect();
   releaseWakeLock();
@@ -238,7 +258,8 @@ let prevComboCounts = new Map(); // comboId → 이전 렌더 시점 카드 수 
 function render() {
   if (!gameState) return;
   const me = gameState.players.find(p => p.userCode === userCode);
-  const others = getOtherSeats(myFixedSeat ?? me?.seatIndex);
+  const spectating = !me;
+  const others = getOtherSeats(spectating ? 0 : (myFixedSeat ?? me?.seatIndex));
 
   const combos = gameState.combos || [];
   const currentComboTotal = combos.reduce((s, c) => s + c.cards.length, 0);
@@ -261,9 +282,33 @@ function render() {
   renderPlayer('top', others[0], comboGrew, growComboEl);
   renderPlayer('left', others[1], comboGrew, growComboEl);
   renderPlayer('right', others[2], comboGrew, growComboEl);
-  renderMyArea(me);
+
+  document.getElementById('game-table').classList.toggle('spectating', spectating);
+  document.getElementById('my-area').style.display = spectating ? 'none' : '';
+  const specPanel = document.getElementById('spectator-panel');
+  if (specPanel) specPanel.style.display = spectating ? '' : 'none';
+  if (spectating) {
+    renderSpectatorSeat(gameState.players.find(p => p.seatIndex === 0));
+  } else {
+    renderMyArea(me);
+    updateActionButtons(me);
+  }
   renderCenter();
-  updateActionButtons(me);
+}
+
+// 관전 중일 때 "내 자리"(seat 0)에 앉은 실제 플레이어를 다른 상대와 같은 방식(카드 뒷면)으로 보여준다
+function renderSpectatorSeat(player) {
+  const nameEl = document.getElementById('spectator-seat0-name');
+  const cardsEl = document.getElementById('spectator-seat0-cards');
+  if (!nameEl || !cardsEl || !player) return;
+  const avatarEmoji = AVATAR_MAP[player.avatar] || (player.isAI ? '🤖' : '👤');
+  nameEl.innerHTML = rankBadgeHtml(player) + avatarEmoji + ' ' + nameGold(player);
+  cardsEl.innerHTML = '';
+  for (let i = 0; i < (player.handCount || 0); i++) {
+    const c = document.createElement('div');
+    c.className = 'card card-back';
+    cardsEl.appendChild(c);
+  }
 }
 
 function getOtherSeats(mySeat) {

@@ -138,13 +138,19 @@ socket.on('roomList', ({ rooms }) => renderRoomList(rooms));
 function renderRoomList(rooms) {
   const el = document.getElementById('room-list');
   if (!rooms.length) { el.innerHTML = '<div class="empty-rooms">열린 방이 없어요, 방을 만들어보세요</div>'; return; }
-  el.innerHTML = rooms.map(r => `
-    <div class="room-row${(r.memberCount >= 4 || r.playing) ? ' full' : ''}" data-roomid="${r.id}">
+  el.innerHTML = rooms.map(r => {
+    const isFull = r.playing ? r.waitingCap <= 0 : r.memberCount >= 4;
+    const statusText = r.playing
+      ? (r.waitingCap > 0 ? `게임 중 · 대기 ${r.waitingCount}/${r.waitingCap}` : '게임 중 · 정원 마감')
+      : `${r.memberCount}/4`;
+    return `
+    <div class="room-row${isFull ? ' full' : ''}" data-roomid="${r.id}">
       <span class="lock">${r.locked ? '🔒' : ''}</span>
       <span class="rname">${r.title}</span>
-      <span class="rcount">${r.playing ? '게임 중' : r.memberCount + '/4'}</span>
+      <span class="rcount">${statusText}</span>
     </div>
-  `).join('');
+  `;
+  }).join('');
   el.querySelectorAll('.room-row').forEach(row => {
     row.onclick = () => {
       if (row.classList.contains('full')) return;
@@ -300,6 +306,12 @@ socket.on('adminStartError', msg => {
 
 socket.on('gameState', () => {
   if (!inWaitingRoom) return;
+  setCookie('gameMode', 'multi');
+  location.href = 'game.html';
+});
+
+// 진행 중인 방에 대기(관전)로 들어간 경우 — 대기실을 거치지 않고 바로 게임 화면으로
+socket.on('spectateOk', () => {
   setCookie('gameMode', 'multi');
   location.href = 'game.html';
 });

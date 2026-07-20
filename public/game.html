@@ -13,6 +13,11 @@
   <!-- Game Table -->
   <div id="game-table">
 
+    <!-- 대기자 뱃지 - 플레이어/대기자 모두에게 노출 -->
+    <div id="waiter-badge" style="display:none">
+      <div id="waiter-badge-text"></div>
+    </div>
+
     <!-- Top player -->
     <div class="player-area top" id="player-top">
       <div class="player-info">
@@ -97,6 +102,16 @@
           <button id="btn-sort-off" class="btn-sort">원래대로</button>
         </div>
       </div>
+    </div>
+
+    <!-- 관전(대기) 패널 - 진행중인 방에 대기자로 들어왔을 때만 my-area 자리를 대체 -->
+    <div id="spectator-panel" style="display:none">
+      <div id="spectator-seat0">
+        <span id="spectator-seat0-name"></span>
+        <div id="spectator-seat0-cards" class="player-cards"></div>
+      </div>
+      <div id="spectator-msg">🎬 게임을 구경하고 있어요</div>
+      <button id="btn-spectator-leave" class="btn-secondary">나가기</button>
     </div>
 
     <!-- Game log -->
