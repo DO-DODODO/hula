@@ -123,6 +123,51 @@ function broadcastRoomList() {
   io.emit('roomList', { rooms: list });
 }
 
+// 대기자 연결이 끊기면 즉시 내보내지 않고 잠깐 유예를 둔다 —
+// index.html → game.html 페이지 이동 자체가 소켓 재연결(짧은 순간의 disconnect)을 일으키기 때문에,
+// 유예 없이 바로 내보내면 정상적으로 관전 화면에 들어가려던 사람까지 쫓겨나 버림.
+const WAITER_LEAVE_GRACE_MS = 6000;
+function scheduleWaiterLeave(room, userCode) {
+  const existing = room.waiterLeaveTimers.get(userCode);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    room.waiterLeaveTimers.delete(userCode);
+    if (!room.waiters.has(userCode)) return;
+    room.waiters.delete(userCode);
+    if (room.readyPhase) {
+      room.readyPhase.requiredCodes.delete(userCode);
+      room.readyPhase.readyCodes.delete(userCode);
+      room.readyPhase.deadlines.delete(userCode);
+      room.readyPhase.timers.delete(userCode);
+    }
+    broadcastWaiterList(room);
+    broadcastRoomList();
+    checkAndCloseIfAlone(room);
+  }, WAITER_LEAVE_GRACE_MS);
+  room.waiterLeaveTimers.set(userCode, t);
+}
+function cancelWaiterLeave(room, userCode) {
+  const t = room.waiterLeaveTimers.get(userCode);
+  if (t) { clearTimeout(t); room.waiterLeaveTimers.delete(userCode); }
+}
+
+// 게임 종료 후 "한 판 더" 준비 단계에서, 온라인 인원(기존 참가자+대기자)이 1명 이하로 줄면
+// 남은 사람도 메인으로 돌려보내고 방을 정리한다. startReadyPhase 최초 진입 시 + 준비 단계 중
+// 누군가 연결이 끊길 때마다 재검사한다.
+function checkAndCloseIfAlone(room) {
+  if (!room.lastGamePlayers || room.game) return false;
+  const onlineHumans = room.lastGamePlayers.filter(p => !p.isAI && getSocketId(p.userCode));
+  const onlineWaiters = [...room.waiters].filter(uc => getSocketId(uc));
+  if (onlineHumans.length + onlineWaiters.length > 1) return false;
+  for (const p of onlineHumans) emitToPlayer(p.userCode, 'playAgainError', '함께할 사람이 없어 메인으로 돌아갑니다.');
+  for (const uc of onlineWaiters) emitToPlayer(uc, 'playAgainError', '함께할 사람이 없어 메인으로 돌아갑니다.');
+  if (room.readyPhase) { for (const t of room.readyPhase.timers.values()) clearTimeout(t); }
+  for (const t of room.waiterLeaveTimers.values()) clearTimeout(t);
+  rooms.delete(room.id);
+  broadcastRoomList();
+  return true;
+}
+
 async function broadcastRoomWaiting(room) {
   const badges = await getGlobalBadges();
   const players = [];
@@ -224,6 +269,23 @@ function resumeIfInvitePaused(userCode) {
   if (cur?.isAI) setTimeout(() => runAITurn(g, cur), 2000 + Math.random() * 1000);
 }
 
+// userCode가 얽힌 대기 중인 초대를 정리한다: 내가 보낸 초대는 취소, 나한테 온 초대는 상대에게 취소 알림.
+// disconnect뿐 아니라 중복 로그인으로 옛 소켓을 강제 종료할 때도 호출해야 함 — 그 경로는
+// disconnect 이벤트가 오기 전에 세션을 먼저 지워버려서 여기 정리가 누락되면 pendingInvites가
+// 영원히 안 지워진 채 남아 "이미 다른 초대가 진행 중이에요" 오류를 계속 일으킴.
+function cancelInvitesFor(userCode) {
+  for (const [key, inv] of [...pendingInvites]) {
+    if (inv.fromCode === userCode) {
+      pendingInvites.delete(key);
+      resumeIfInvitePaused(inv.toCode);
+      emitToPlayer(inv.toCode, 'inviteCancelled', {});
+    } else if (inv.toCode === userCode) {
+      pendingInvites.delete(key);
+      emitToPlayer(inv.fromCode, 'inviteCancelled', {});
+    }
+  }
+}
+
 // ── 멀티모드 "한 판 더" 준비 단계 (방 단위) ─────────────────────────────────
 const READY_TIMEOUT_MS = 30000;
 
@@ -259,6 +321,7 @@ function dropWaiterOnTimeout(room, userCode) {
   emitToPlayer(userCode, 'playAgainError', '준비 시간이 지나 대기가 취소됐습니다.');
   broadcastWaiterList(room);
   broadcastRoomList();
+  if (checkAndCloseIfAlone(room)) return;
   broadcastReadyStatus(room);
 }
 
@@ -280,14 +343,8 @@ async function startReadyPhase(room) {
   clearReadyPhase(room);
   if (!room.lastGamePlayers) return;
 
+  if (checkAndCloseIfAlone(room)) return;
   const onlineHumans = room.lastGamePlayers.filter(p => !p.isAI && getSocketId(p.userCode));
-  if (onlineHumans.length <= 1) {
-    for (const p of onlineHumans) {
-      emitToPlayer(p.userCode, 'playAgainError', '함께할 사람이 없어 메인으로 돌아갑니다.');
-    }
-    removeMemberFromRoom(room, room.lastGamePlayers.find(p => !p.isAI)?.userCode || '__none__');
-    return;
-  }
 
   // 방장은 "다시 시작" 버튼을 직접 누르는 쪽이라 준비 대상에서 제외, 나머지(기존 인원+대기자)는 준비 확인
   const waiterCodes = [...room.waiters].filter(uc => getSocketId(uc));
@@ -760,11 +817,14 @@ io.on('connection', (socket) => {
     if (!user) { socket.emit('loginError', '등록되지 않은 코드입니다.'); return; }
 
     // 같은 계정으로 이미 로그인된 소켓이 있으면 기존 소켓 강제 종료
+    // (index.html → game.html 페이지 이동 시에도 새 소켓이 먼저 로그인하며 이 경로를 탈 수 있음)
     for (const [oldSid, sess] of sessions) {
       if (sess.userCode === user.userCode && oldSid !== socket.id) {
         io.to(oldSid).emit('duplicateLogin');
         io.sockets.sockets.get(oldSid)?.disconnect(true);
         sessions.delete(oldSid);
+        // disconnect 이벤트는 세션이 이미 지워진 뒤 도착해 정리 로직이 스킵되므로 여기서 대신 처리
+        cancelInvitesFor(user.userCode);
         break;
       }
     }
@@ -792,11 +852,17 @@ io.on('connection', (socket) => {
           return;
         }
         if (myRoom.waiters.has(user.userCode)) {
+          cancelWaiterLeave(myRoom, user.userCode);
           socket.emit('gameState', getPublicState(myRoom.game, user.userCode));
           socket.emit('spectateOk', { roomId: myRoom.id });
+          broadcastWaiterList(myRoom); // 재접속한 이 소켓에도 현재 대기자 명단을 다시 보내줌
           return;
         }
-      } else {
+      } else if (myRoom.waiters.has(user.userCode)) {
+        // "한 판 더" 준비 단계 중 대기자가 재접속한 경우 — 유예 취소만 하고 그대로 둠
+        // (게임 화면에서 결과창을 계속 보고 있는 상태이므로 별도 화면 전환 불필요)
+        cancelWaiterLeave(myRoom, user.userCode);
+      } else if (!myRoom.lastGamePlayers) {
         broadcastRoomWaiting(myRoom);
         return;
       }
@@ -1086,6 +1152,7 @@ io.on('connection', (socket) => {
       members: new Set([sess.userCode]),
       readyMembers: new Set(), // 방장 제외, 준비 완료한 멤버
       waiters: new Set(), // 게임 진행 중 들어와 관전하며 다음 판을 기다리는 인원
+      waiterLeaveTimers: new Map(), // userCode → 연결 끊김 후 대기자를 실제로 내보내기까지의 유예 타이머
       game: null, lastGamePlayers: null, lastGameWinnerCode: null, readyPhase: null,
       createdBy: sess.userCode,
     };
@@ -1663,17 +1730,22 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', async () => {
     const sess = sessions.get(socket.id);
+    // 아래 로직들이 getSocketId()로 "지금 몇 명이나 온라인인지"를 정확히 계산할 수 있도록
+    // 세션은 정리 로직을 실행하기 전에 먼저 지운다 (기존엔 맨 마지막에 지워서, 지금 끊기고
+    // 있는 이 세션 자신이 "아직 온라인"으로 잘못 집계되는 문제가 있었음).
+    sessions.delete(socket.id);
     if (sess) {
       const room = rooms.get(sess.roomId);
-      if (room && !(room.game && room.game.status === 'playing')) {
-        // 게임 시작 전 대기 중 연결이 끊기면 방에서 빠짐
+      if (room && !room.game && !room.lastGamePlayers) {
+        // 게임을 아직 한 번도 시작 안 한, 순수 대기 중인 방에서 연결이 끊기면 바로 방에서 빠짐
         removeMemberFromRoom(room, sess.userCode);
-      }
-      // 관전(대기) 중이던 사람은 플레이어와 달리 일시정지 없이 즉시 자리 반납
-      if (room && room.waiters.has(sess.userCode)) {
-        room.waiters.delete(sess.userCode);
-        broadcastWaiterList(room);
-        broadcastRoomList();
+      } else if (room && room.waiters.has(sess.userCode)) {
+        // 관전(대기) 중이던 사람은 플레이어와 달리 일시정지 없이 자리를 반납하지만,
+        // index.html → game.html 이동 자체가 순간적인 재연결을 유발하므로 짧은 유예를 둔다
+        scheduleWaiterLeave(room, sess.userCode);
+      } else if (room && !room.game && room.lastGamePlayers) {
+        // "한 판 더" 준비 단계 중 연결이 끊긴 경우: 남은 인원이 1명 이하로 줄면 그 사람도 메인으로 돌려보냄
+        checkAndCloseIfAlone(room);
       }
       presenceVisible.delete(sess.userCode);
       broadcastPresence();
@@ -1723,7 +1795,6 @@ io.on('connection', (socket) => {
         }
       }
     }
-    sessions.delete(socket.id);
   });
 
   function getPlayerGame(userCode) {
