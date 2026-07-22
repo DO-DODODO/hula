@@ -284,6 +284,9 @@ function render() {
   renderPlayer('right', others[2], comboGrew, growComboEl);
 
   document.getElementById('game-table').classList.toggle('spectating', spectating);
+  document.getElementById('game-table').classList.toggle('double-round', !!gameState.isDoubleEvent && gameState.status === 'playing');
+  const dblBadge = document.getElementById('double-round-badge');
+  if (dblBadge) dblBadge.style.display = (!!gameState.isDoubleEvent && gameState.status === 'playing') ? '' : 'none';
   document.getElementById('my-area').style.display = spectating ? 'none' : '';
   const specPanel = document.getElementById('spectator-panel');
   if (specPanel) specPanel.style.display = spectating ? '' : 'none';

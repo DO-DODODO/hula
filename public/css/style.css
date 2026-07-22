@@ -14,6 +14,7 @@ button, .pile, .card-slot, .card { touch-action: manipulation; }
   --text-light: #f0f0f0;
   --text-dim: #aaa;
   --wait: #5aa9e6;
+  --double: #ffd24a;
 }
 
 html, body { width: 100%; height: 100%; overflow: hidden; background: var(--green-dark); font-family: 'Malgun Gothic', sans-serif; }
@@ -546,9 +547,12 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 @keyframes waitPulse { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #game-table.spectating::after { animation: none; } }
 
-/* 대기자 뱃지 - 좌상단 정사각형 카드, 플레이어/대기자 모두에게 노출 */
-#waiter-badge {
+/* 좌상단 뱃지 스택 - 대기자 뱃지 + 2배판 뱃지가 겹치지 않게 세로로 쌓임 */
+#corner-badge-stack {
   position: absolute; top: 6px; left: 6px; z-index: 40;
+  display: flex; flex-direction: column; gap: 5px; align-items: flex-start;
+}
+#waiter-badge {
   width: 78px;
   display: flex; align-items: center; justify-content: center; text-align: center;
   background: rgba(10,20,25,0.72);
@@ -558,6 +562,28 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 }
 #waiter-badge-text { font-size: 10.5px; line-height: 1.35; font-weight: 700; color: #d9ecff; }
 #waiter-badge-text b { color: #fff; }
+
+/* 2배판 뱃지 - 판 내내 표시, 화면 테두리(.double-round)와 짝을 이룸 */
+#double-round-badge {
+  background: rgba(10,20,25,0.72);
+  border: 1px solid rgba(255,210,74,0.5);
+  border-radius: 14px;
+  padding: 6px 10px;
+  font-size: 11px; font-weight: 800; color: var(--double);
+  white-space: nowrap;
+}
+
+/* ── 2배판 화면 테두리 (관전모드와 동일 기법, 골드로 재색상) ── */
+#game-table.double-round::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  outline: 3px solid var(--double);
+  box-shadow: inset 0 0 0 3px rgba(255,210,74,0.5), inset 0 0 30px rgba(255,210,74,0.35), 0 0 24px rgba(255,210,74,0.3);
+  animation: waitPulse 2.6s ease-in-out infinite;
+  z-index: 90;
+}
+@media (prefers-reduced-motion: reduce) { #game-table.double-round::after { animation: none; } }
 
 /* 관전자 패널 - my-area와 같은 자리를 차지 (하단 손패/액션버튼 대체) */
 #spectator-panel {

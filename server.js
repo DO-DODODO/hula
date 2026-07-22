@@ -108,11 +108,14 @@ function roomSummary(room) {
 }
 
 // 대기자 전원 이름을 방 참가자(플레이어) + 대기자 모두에게 알림 ("OOO, OOO님 대기중" 뱃지용)
+// room.game이 게임 종료 직후 "한 판 더" 준비 단계에서 null이 되는 구간에도(room.lastGamePlayers로) 갱신을 보내야
+// 그 구간에 대기자가 빠지거나 타임아웃될 때 뱃지가 실시간으로 사라진다.
 function broadcastWaiterList(room) {
-  if (!room.game) return;
+  const recipients = room.game ? room.game.players : room.lastGamePlayers;
+  if (!recipients) return;
   const names = [...room.waiters].map(uc => sessions.get(getSocketId(uc))?.userName).filter(Boolean);
   const payload = { count: room.waiters.size, names };
-  for (const p of room.game.players) {
+  for (const p of recipients) {
     if (!p.isAI) emitToPlayer(p.userCode, 'waiterList', payload);
   }
   for (const uc of room.waiters) emitToPlayer(uc, 'waiterList', payload);
