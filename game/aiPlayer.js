@@ -32,12 +32,10 @@ function findCombos(hand) {
     if (hand[i].value === 7) found.push({ indices: [i], cards: [hand[i]], type: 'seven' });
   }
 
-  // 7 두 장 세트
+  // 7이 포함된 2장 조합 (7+7 세트 / 7+인접카드 시퀀스 — isValidCombo가 이 두 경우만 2장을 허용)
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      if (hand[i].value === 7 && hand[j].value === 7) {
-        found.push({ indices: [i, j], cards: [hand[i], hand[j]], type: 'set' });
-      }
+      check([i, j]);
     }
   }
 

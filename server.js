@@ -571,9 +571,12 @@ async function runAITurn(game, aiPlayer) {
   if (game.thankYouTaker === aiPlayer.userCode && game.thankYouTakerCard) {
     const takerCard = game.thankYouTakerCard;
     if (aiPlayer.hand.some(c => c.id === takerCard.id)) {
-      // 1. 땡큐 카드 포함한 조합 등록 시도
+      // 1. 땡큐 카드 포함한 조합 등록 시도 (여러 개 걸리면 가장 큰 조합 선택 — 예: 6-7 2장짜리보다 6-7-8 3장짜리 우선)
       const combos = findCombos(aiPlayer.hand);
-      const comboWithCard = combos.find(cb => cb.cards.some(c => c.id === takerCard.id));
+      const combosWithCard = combos.filter(cb => cb.cards.some(c => c.id === takerCard.id));
+      const comboWithCard = combosWithCard.length
+        ? combosWithCard.reduce((a, b) => b.cards.length > a.cards.length ? b : a)
+        : null;
       if (comboWithCard) {
         const r = registerCards(game, aiPlayer.userCode, comboWithCard.cards.map(c => c.id));
         broadcastLog(game, `${aiPlayer.userName} 등록: [${r.combo.cards.map(cardName).join(', ')}]`);
