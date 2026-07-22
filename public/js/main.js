@@ -744,26 +744,62 @@ function msRenderRankLegend(d, meColor) {
   return `<div class="ms-rank-legend">${items}</div>`;
 }
 
+function msFormatDateKey(key) {
+  const [, m, day] = key.split('-');
+  return `${parseInt(m, 10)}.${parseInt(day, 10)}`;
+}
+
+// "나" 탭 최근 1주/1달 카드 4개 (그래프 없이 카드로만 표시)
+function msRenderPeriodCards(periodTotals, mode) {
+  const cell = (label, body) => `<div class="ms-card"><div class="ic-lb">${label}</div>${body}</div>`;
+  const rangeText = t => `${msFormatDateKey(t.startKey)}~${msFormatDateKey(t.endKey)}`;
+  const pointCard = (t, label) => {
+    if (t.games === 0) return cell(label, '<div class="empty">이 기간 기록 없음</div>');
+    const cls = t.pointSum >= 0 ? 'pos' : 'neg';
+    return cell(label, `<div class="val ${cls}">${msFormatSigned(t.pointSum, mode)}</div><div class="date">${rangeText(t)} · ${t.games}판</div>`);
+  };
+  const rateCard = (t, label) => {
+    if (t.games === 0) return cell(label, '<div class="empty">이 기간 기록 없음</div>');
+    return cell(label, `<div class="val">${t.winRate.toFixed(1)}%</div><div class="date">${rangeText(t)} · ${t.wins}승 ${t.losses}패</div>`);
+  };
+  return (
+    pointCard(periodTotals.week, '🗓️ 최근 1주 포인트') +
+    rateCard(periodTotals.week, '🎯 최근 1주 승률') +
+    pointCard(periodTotals.month, '🗓️ 최근 1달 포인트') +
+    rateCard(periodTotals.month, '🎯 최근 1달 승률')
+  );
+}
+
 function renderMyStats() {
   const el = document.getElementById('mystats-content');
   const d = mystatsData;
-  if (!d || d.scope !== mystatsScope || d.mode !== mystatsMode || d.period !== mystatsPeriod) return;
+  if (!d || d.scope !== mystatsScope || d.mode !== mystatsMode) return;
+  if (d.scope === 'all' && d.period !== mystatsPeriod) return;
 
   const mode = mystatsMode;
-  const meColor = mode === 'multi' ? '#8fb8e0' : 'var(--gold)';
-  const cardsHtml = d.scope === 'me' ? msRenderMeCards(d.summary) : msRenderAllCards(d.records);
 
-  const meValues = mystatsMetric === 'value'
-    ? (d.scope === 'me' ? d.trend.cumulative : d.trend.me.cumulative)
-    : (d.scope === 'me' ? d.trend.winRate : d.trend.me.winRate);
-
-  const series = [{ values: meValues, color: meColor, width: d.scope === 'all' ? 3 : 2.4 }];
-  if (d.scope === 'all') {
-    d.trend.others.forEach((o, i) => {
-      const v = mystatsMetric === 'value' ? o.cumulative : o.winRate;
-      series.push({ values: v, color: MS_RANK_COLORS[i % MS_RANK_COLORS.length], width: 2.1 });
-    });
+  // "나" 탭: 그래프 없이 역대 기록 카드 + 최근 기간 카드만 표시
+  if (d.scope === 'me') {
+    el.innerHTML = `
+      <div class="ms-group-label">역대 기록</div>
+      <div class="ms-stat-grid">${msRenderMeCards(d.summary)}</div>
+      <div class="ms-group-label">최근 기간</div>
+      <div class="ms-stat-grid">${msRenderPeriodCards(d.periodTotals, mode)}</div>
+    `;
+    return;
   }
+
+  // "전체" 탭: 기존 그래프(상위 3명 비교) 그대로 유지
+  const meColor = mode === 'multi' ? '#8fb8e0' : 'var(--gold)';
+  const cardsHtml = msRenderAllCards(d.records);
+
+  const meValues = mystatsMetric === 'value' ? d.trend.me.cumulative : d.trend.me.winRate;
+
+  const series = [{ values: meValues, color: meColor, width: 3 }];
+  d.trend.others.forEach((o, i) => {
+    const v = mystatsMetric === 'value' ? o.cumulative : o.winRate;
+    series.push({ values: v, color: MS_RANK_COLORS[i % MS_RANK_COLORS.length], width: 2.1 });
+  });
 
   const nonNull = series.flatMap(s => s.values.filter(v => v !== null && v !== undefined));
   let min = 0, max = 1;
@@ -777,8 +813,8 @@ function renderMyStats() {
     min = 0; max = 100;
   }
 
-  // scope=all일 땐 "나" 라인을 맨 마지막(맨 위)에 그려서 다른 라인에 안 가리게
-  const drawOrder = d.scope === 'all' ? [...series.slice(1), series[0]] : series;
+  // "나" 라인을 맨 마지막(맨 위)에 그려서 다른 라인에 안 가리게
+  const drawOrder = [...series.slice(1), series[0]];
   const svgLines = drawOrder.map(s => msPolyline(s.values, min, max, s.color, s.width)).join('');
 
   let baselineHtml = '';
@@ -792,12 +828,9 @@ function renderMyStats() {
 
   const metricLabel = mystatsMetric === 'value' ? (mode === 'multi' ? '잔액 추이' : '포인트 추이') : '승률 추이';
   const periodLabel = mystatsPeriod === 'week' ? '최근 1주' : mystatsPeriod === 'month' ? '최근 1달' : '전체';
-  const nowValue = meValues.length ? meValues[meValues.length - 1] : null;
-  const headRightHtml = d.scope === 'me'
-    ? `<div class="ms-chart-now" style="color:${meColor}">${msFormatValue(nowValue, mode, mystatsMetric)}</div>`
-    : `<div class="ms-rank-pill">${d.myRank ? d.myRank + '위' : '순위 없음'}</div>`;
-  const legendHtml = d.scope === 'all' ? msRenderRankLegend(d, meColor) : '';
-  const subLabel = d.scope === 'all' ? '상위 3명 비교' : (mystatsMetric === 'winrate' ? '통산 승률' : '누적 값');
+  const headRightHtml = `<div class="ms-rank-pill">${d.myRank ? d.myRank + '위' : '순위 없음'}</div>`;
+  const legendHtml = msRenderRankLegend(d, meColor);
+  const subLabel = '상위 3명 비교';
 
   el.innerHTML = `
     <div class="ms-stat-grid">${cardsHtml}</div>

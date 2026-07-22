@@ -1643,13 +1643,12 @@ io.on('connection', (socket) => {
 
     if (scope === 'me') {
       socket.emit('myStats', {
-        mode, scope, period,
+        mode, scope,
         summary: { maxGain, maxLoss, maxWinStreak, maxLoseStreak },
-        trend: {
-          dates: myTrend.cumulative.map(p => p.date),
-          cumulative: myCumulativeAnchored.map(p => p.value),
-          winRate: myTrend.winRate.map(p => p.value),
-        }
+        periodTotals: {
+          week: statsUtils.computePeriodTotals(myRows, 7),
+          month: statsUtils.computePeriodTotals(myRows, 30),
+        },
       });
       return;
     }

@@ -108,6 +108,19 @@ function alignSeriesToDates(dailyMap, dateKeys, metric) {
   });
 }
 
+// 최근 N일(주=7/달=30) 동안 실제로 치른 판만 골라 판수/승수/포인트 순변동 집계 + 표시용 날짜범위
+// ("나" 탭 요약카드 - 최근 1주/1달 포인트·승률)
+function computePeriodTotals(rows, days) {
+  const endKey = todayKeyKST();
+  const startKey = dayKeyKST(Math.floor(Date.now() / 1000) - (days - 1) * 86400);
+  const inPeriod = rows.filter(r => dayKeyKST(r.playedAt) >= startKey);
+  const games = inPeriod.length;
+  const wins = inPeriod.filter(r => r.rank === 1).length;
+  const pointSum = inPeriod.reduce((s, r) => s + r.pointChange, 0);
+  const winRate = games > 0 ? Math.floor((wins / games) * 1000) / 10 : null;
+  return { games, wins, losses: games - wins, pointSum, winRate, startKey, endKey };
+}
+
 // 단일 유저 추이 시리즈 (나 탭에서 사용)
 function buildTrendSeries(rows, period) {
   const dailyMap = buildDailySeries(rows);
@@ -135,5 +148,5 @@ module.exports = {
   SESSION_GAP_SEC, isSameSession,
   computeMaxMinPointChange, computeStreaks,
   dayKeyKST, todayKeyKST, buildDailySeries, getDateRangeKeys, alignSeriesToDates,
-  buildTrendSeries, anchorToActualBalance,
+  buildTrendSeries, anchorToActualBalance, computePeriodTotals,
 };
