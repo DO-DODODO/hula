@@ -9,15 +9,18 @@ const CARD_SKINS = {
   dolphin: { free: false, singleReq: 100000, multiReq: 1500000, label: '돌고래' },
 };
 
-// 이 스킨을 "메인 스킨"으로 선택 가능한지 — 무료거나, 싱글/멀티 둘 중 하나라도 역대 최고 기준을 채우면 선택 가능
+// 이 스킨을 "메인 스킨"으로 선택 가능한지 — 무료거나, 싱글/멀티 조건을 둘 다 채워야 선택 가능
 function isSkinSelectable(skinKey, peakSinglePoints, peakMultiBalance) {
   const cfg = CARD_SKINS[skinKey];
   if (!cfg) return false;
   if (cfg.free) return true;
-  return peakSinglePoints >= cfg.singleReq || peakMultiBalance >= cfg.multiReq;
+  return peakSinglePoints >= cfg.singleReq && peakMultiBalance >= cfg.multiReq;
 }
 
-// 특정 모드(싱글/멀티) 게임 화면에서 이 스킨을 실제로 보여줘도 되는지 — 모드별 독립 체크
+// 특정 모드(싱글/멀티) 게임 화면에서 이 스킨을 실제로 보여줘도 되는지.
+// isSkinSelectable이 이제 두 조건을 다 요구하므로 선택된 스킨은 사실상 항상 이 체크도 통과하지만,
+// "peak가 스킨 선택 이후 어떤 이유로든 어긋나도 절대 조건 미달 상태로 노출되지 않는다"는
+// 안전장치로 남겨둠(이벤트 기능에서 검증 누락으로 실제 사고가 났던 적이 있어 방어적으로 유지).
 function isSkinUsableInMode(skinKey, mode, peakSinglePoints, peakMultiBalance) {
   const cfg = CARD_SKINS[skinKey];
   if (!cfg) return false;

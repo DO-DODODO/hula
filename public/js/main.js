@@ -404,7 +404,7 @@ function renderSkinGrid() {
     const cfg = CARD_SKINS[key];
     const singleMet = cfg.free || peakSingle >= (cfg.singleReq || 0);
     const multiMet = cfg.free || peakMulti >= (cfg.multiReq || 0);
-    const selectable = cfg.free || singleMet || multiMet;
+    const selectable = cfg.free || (singleMet && multiMet);
     const lockHtml = selectable ? '' : '<span class="lock-badge">🔒</span>';
     const statusHtml = cfg.free
       ? `<div class="skin-status ok">${key === selected ? '사용 중' : '사용 가능'}</div>`
@@ -425,11 +425,11 @@ function renderSkinGrid() {
       const cfg = CARD_SKINS[key];
       const peakSingle2 = me.peakSinglePoints ?? me.singlePoints ?? 0;
       const peakMulti2 = me.peakMultiBalance ?? me.multiBalance ?? 0;
-      const selectable = cfg.free || peakSingle2 >= (cfg.singleReq || 0) || peakMulti2 >= (cfg.multiReq || 0);
+      const selectable = cfg.free || (peakSingle2 >= (cfg.singleReq || 0) && peakMulti2 >= (cfg.multiReq || 0));
       const msg = document.getElementById('skin-msg');
       if (!selectable) {
         msg.style.color = '#e08f8f';
-        msg.textContent = `🔒 "${cfg.label}"은(는) 싱글 ${cfg.singleReq.toLocaleString()}P 또는 멀티 ₩${cfg.multiReq.toLocaleString()} 달성 시 선택할 수 있어요`;
+        msg.textContent = `🔒 "${cfg.label}"은(는) 싱글 ${cfg.singleReq.toLocaleString()}P, 멀티 ₩${cfg.multiReq.toLocaleString()} 둘 다 달성 시 선택할 수 있어요`;
         return;
       }
       socket.emit('setCardSkin', { skin: key });
