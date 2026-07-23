@@ -50,17 +50,38 @@ async function init() {
       pointChange INTEGER NOT NULL,
       didRegister INTEGER DEFAULT 0,
       continuedFromPrevious INTEGER DEFAULT NULL,
+      isHula INTEGER DEFAULT 0,
       playedAt INTEGER DEFAULT (strftime('%s','now'))
     )
   `);
   try {
     await db.query(sql`ALTER TABLE game_results ADD COLUMN continuedFromPrevious INTEGER DEFAULT NULL`);
   } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
+  try {
+    await db.query(sql`ALTER TABLE game_results ADD COLUMN isHula INTEGER DEFAULT 0`);
+  } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
 
   await db.query(sql`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
+    )
+  `);
+
+  // 주간 이벤트 보상 수령 기록 — game_results와 완전히 분리(게임 성적 통계에 영향 안 줌).
+  // (userCode, weekStart, category) 조합이 곧 "수령 여부" 자체라 별도 플래그 불필요.
+  // UNIQUE 제약을 DB 레벨에 걸어서, 더블클릭/여러 탭 등으로 거의 동시에 청구 요청이 와도
+  // (조회 후 삽입 방식의 애플리케이션 레벨 체크만으로는 막을 수 없는 경합) 중복 지급이 절대 안 되게 함.
+  await db.query(sql`
+    CREATE TABLE IF NOT EXISTS event_rewards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userCode TEXT NOT NULL,
+      weekStart TEXT NOT NULL,
+      category TEXT NOT NULL,
+      pointAmount INTEGER DEFAULT 0,
+      moneyAmount INTEGER DEFAULT 0,
+      claimedAt INTEGER DEFAULT (strftime('%s','now')),
+      UNIQUE(userCode, weekStart, category)
     )
   `);
 
@@ -104,11 +125,11 @@ async function setSetting(key, value) {
 async function saveGameResult(gameId, mode, results, isHula = false, continuedFromPrevious = null) {
   for (const r of results) {
     if (r.isAI) continue;
-    await db.query(sql`
-      INSERT INTO game_results (gameId, mode, userCode, rank, cardSum, pointChange, didRegister, continuedFromPrevious)
-      VALUES (${gameId}, ${mode}, ${r.userCode}, ${r.rank}, ${r.cardSum}, ${r.pointChange}, ${r.didRegister ? 1 : 0}, ${continuedFromPrevious === null ? null : (continuedFromPrevious ? 1 : 0)})
-    `);
     const isHulaWinner = isHula && r.rank === 1;
+    await db.query(sql`
+      INSERT INTO game_results (gameId, mode, userCode, rank, cardSum, pointChange, didRegister, continuedFromPrevious, isHula)
+      VALUES (${gameId}, ${mode}, ${r.userCode}, ${r.rank}, ${r.cardSum}, ${r.pointChange}, ${r.didRegister ? 1 : 0}, ${continuedFromPrevious === null ? null : (continuedFromPrevious ? 1 : 0)}, ${isHulaWinner ? 1 : 0})
+    `);
     if (mode === 'multi') {
       await db.query(sql`
         UPDATE users SET
@@ -142,7 +163,7 @@ async function getGameResultsForUser(userCode, mode) {
 
 async function getAllGameResults(mode) {
   return db.query(sql`
-    SELECT userCode, pointChange, rank, playedAt, continuedFromPrevious
+    SELECT userCode, pointChange, rank, playedAt, continuedFromPrevious, isHula
     FROM game_results
     WHERE mode = ${mode}
     ORDER BY userCode ASC, playedAt ASC
@@ -210,9 +231,41 @@ async function chargeBalance(userCode, mode) {
   return { ok: true, amount };
 }
 
+// 이번 주(weekStart)에 이 유저가 이미 받은 부문들 (Set으로 반환 — "받음" 여부 체크용)
+async function getClaimedCategoriesForWeek(userCode, weekStart) {
+  const rows = await db.query(sql`
+    SELECT category FROM event_rewards WHERE userCode = ${userCode} AND weekStart = ${weekStart}
+  `);
+  return new Set(rows.map(r => r.category));
+}
+
+// 이벤트 보상 수령: 기록 남기고(game_results와 분리) 실제 잔액에 반영.
+// 조회 후 삽입이 아니라 INSERT 자체를 시도해서 UNIQUE 제약 위반 여부로 "이미 받았는지"를 판단 —
+// 거의 동시에 두 번 요청이 와도 DB 레벨에서 하나만 성공하는 게 보장됨(경합 조건 없음).
+async function claimEventReward(userCode, weekStart, category, pointAmount, moneyAmount) {
+  try {
+    await db.query(sql`
+      INSERT INTO event_rewards (userCode, weekStart, category, pointAmount, moneyAmount)
+      VALUES (${userCode}, ${weekStart}, ${category}, ${pointAmount}, ${moneyAmount})
+    `);
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT') return { ok: false, msg: '이미 받았습니다' };
+    console.error('claimEventReward insert 실패(제약 위반 아님):', e);
+    return { ok: false, msg: '오류가 발생했습니다' };
+  }
+  if (pointAmount) {
+    await db.query(sql`UPDATE users SET singlePoints = singlePoints + ${pointAmount} WHERE userCode = ${userCode}`);
+  }
+  if (moneyAmount) {
+    await db.query(sql`UPDATE users SET multiBalance = multiBalance + ${moneyAmount} WHERE userCode = ${userCode}`);
+  }
+  return { ok: true };
+}
+
 module.exports = {
   init, getUser, createUser, updateUser, getAllUsers, deleteUser,
   getSetting, setSetting, saveGameResult,
   getMultiRanking, getSingleRanking, getHulaRanking, chargeBalance, getUserCount,
-  getGameResultsForUser, getAllGameResults
+  getGameResultsForUser, getAllGameResults,
+  getClaimedCategoriesForWeek, claimEventReward
 };

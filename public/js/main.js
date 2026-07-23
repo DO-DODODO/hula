@@ -49,6 +49,7 @@ socket.on('loginSuccess', (user) => {
   setCookie('isAdmin', user.isAdmin ? '1' : '0');
   updateMainScreen();
   showScreen('screen-main');
+  socket.emit('getEventStatus'); // 메인화면 이벤트 아이콘 뱃지 표시 여부를 미리 알아야 해서 로그인 직후 조회
   if (sessionStorage.getItem('autoJoinRoom') === '1') {
     sessionStorage.removeItem('autoJoinRoom');
     socket.emit('joinRoomViaInvite');
@@ -863,6 +864,164 @@ function renderMyStats() {
     btn.onclick = () => msSetPeriod(btn.dataset.period);
   });
 }
+
+// ── 주간 이벤트 ────────────────────────────────────────────────────────
+const EVENT_CATEGORY_ORDER = ['winsSingle', 'winsMulti', 'gamesSingle', 'gamesMulti', 'hula'];
+const EVENT_CATEGORY_META = {
+  winsSingle: { label: '최다승 · 싱글', unit: '승', icon: '🎁' },
+  winsMulti: { label: '최다승 · 멀티', unit: '승', icon: '🎁' },
+  gamesSingle: { label: '최다판 · 싱글', unit: '판', icon: '🎁' },
+  gamesMulti: { label: '최다판 · 멀티', unit: '판', icon: '🎁' },
+  hula: { label: '최다훌라 · 합산', unit: '회', icon: '✨' },
+};
+let eventData = null;
+
+// 이번 주 내가 수상했는데 아직 안 받은 게 하나라도 있으면 메인화면 이벤트 아이콘에 뱃지 표시
+function updateEventBadge(data) {
+  const hasUnclaimed = Object.values(data.results).some(c => c.isMine && !c.claimed);
+  document.getElementById('event-badge-dot').style.display = hasUnclaimed ? '' : 'none';
+}
+
+function msFormatFullDate(unixSec) {
+  const d = new Date(unixSec * 1000);
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일(${MS_WEEKDAY_KR[d.getDay()]})`;
+}
+
+document.getElementById('btn-event').onclick = () => {
+  showScreen('screen-event');
+  socket.emit('getEventStatus');
+};
+document.getElementById('btn-back-event').onclick = () => showScreen('screen-main');
+
+document.getElementById('event-tab-live').onclick = () => evSetTab('live');
+document.getElementById('event-tab-result').onclick = () => evSetTab('result');
+function evSetTab(tab) {
+  document.getElementById('event-tab-live').classList.toggle('active', tab === 'live');
+  document.getElementById('event-tab-result').classList.toggle('active', tab === 'result');
+  document.getElementById('event-panel-live').classList.toggle('active', tab === 'live');
+  document.getElementById('event-panel-result').classList.toggle('active', tab === 'result');
+}
+
+socket.on('eventStatus', (data) => {
+  eventData = data;
+  updateEventBadge(data);
+
+  // 이벤트 화면이 지금 안 열려있으면(로그인 직후 뱃지용 조회) 화면 갱신은 건너뜀
+  if (!document.getElementById('screen-event').classList.contains('active')) return;
+
+  document.getElementById('event-msg').textContent = '';
+
+  document.getElementById('event-dates').textContent =
+    `${msFormatCardDate(data.currentStartSec)} ~ ${msFormatCardDate(data.currentLastDaySec)}`;
+
+  const noticeStartSec = data.currentStartSec + 7 * 86400;
+  const noticeEndSec = noticeStartSec + 7 * 86400 - 1;
+  document.getElementById('event-notice').innerHTML =
+    `📅 이번 주 결과는 <b>${msFormatFullDate(noticeStartSec)} ~ ${msFormatFullDate(noticeEndSec)}</b>까지 이 메뉴에서 받을 수 있어요`;
+
+  renderEventLive(data);
+  renderEventResults(data);
+});
+
+function renderEventLive(data) {
+  const grid = document.getElementById('event-live-grid');
+  grid.innerHTML = EVENT_CATEGORY_ORDER.map(key => {
+    const meta = EVENT_CATEGORY_META[key];
+    const c = data.live[key];
+    if (c.winners.length === 0) {
+      return `<div class="live-card empty"><div class="lc-lb">${meta.label}</div><div class="lc-body">아직 없음</div></div>`;
+    }
+    const w = c.winners[0];
+    const tie = c.winners.length > 1 ? ` 외 ${c.winners.length - 1}명` : '';
+    const wide = key === 'hula' ? ' style="grid-column:1 / span 2"' : '';
+    return `<div class="live-card"${wide}><div class="lc-lb">${meta.label}</div><div class="lc-body"><span class="lc-av">${msAvatarEmoji(w.avatar)}</span><span class="lc-nm">${w.userName}${tie}</span><span class="lc-val">${c.value}${meta.unit}</span></div></div>`;
+  }).join('');
+}
+
+function evRewardText(c) {
+  return [
+    c.pointAmount ? `${c.pointAmount.toLocaleString()}점` : null,
+    c.moneyAmount ? `₩${c.moneyAmount.toLocaleString()}` : null,
+  ].filter(Boolean).join('+');
+}
+
+function renderEventResults(data) {
+  const list = document.getElementById('event-result-list');
+  document.getElementById('event-result-label').textContent =
+    `지난 주 결과 (${msFormatCardDate(data.lastStartSec)} ~ ${msFormatCardDate(data.lastLastDaySec)})`;
+
+  list.innerHTML = EVENT_CATEGORY_ORDER.map(key => {
+    const meta = EVENT_CATEGORY_META[key];
+    const c = data.results[key];
+    const rewardText = evRewardText(c);
+
+    if (c.winners.length === 0) {
+      return `<div class="result-card">
+        <div class="rc-top"><span class="rc-title">🥇 ${meta.label}</span><span class="rc-reward">${rewardText}</span></div>
+        <div class="rc-empty">이번 주 해당자 없음</div>
+      </div>`;
+    }
+
+    const winnerHtml = c.winners.map(w => {
+      const isMe = me && w.userCode === me.userCode;
+      return `<span class="rc-av">${msAvatarEmoji(w.avatar)}</span><span class="rc-nm">${w.userName}${isMe ? ' (나)' : ''}</span>`;
+    }).join('<span class="rc-nm" style="margin-left:-2px">, </span>');
+    const tieTag = c.winners.length > 1 ? `<span class="rc-tie-tag">공동 ${c.winners.length}명</span>` : '';
+
+    let claimHtml = '';
+    if (c.isMine) {
+      claimHtml = c.claimed
+        ? `<div class="rc-claim-row"><span class="claim-hint claimed">✓ 수령 완료</span><button class="btn-claimed" disabled>받음</button></div>`
+        : `<div class="rc-claim-row"><span class="claim-hint">받을 수 있어요!</span><button class="btn-claim" data-category="${key}">받기</button></div>`;
+    }
+
+    return `<div class="result-card${c.isMine ? ' mine' : ''}">
+      <div class="rc-top"><span class="rc-title">🥇 ${meta.label}</span><span class="rc-reward">${rewardText}</span></div>
+      <div class="rc-winner">${winnerHtml}${tieTag}<span class="rc-detail">${c.value}${meta.unit}</span></div>
+      ${claimHtml}
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.btn-claim').forEach(btn => {
+    btn.onclick = () => {
+      btn.disabled = true;
+      socket.emit('claimEventReward', { category: btn.dataset.category });
+    };
+  });
+}
+
+function openClaimLayer(category, pointAmount, moneyAmount) {
+  const meta = EVENT_CATEGORY_META[category];
+  document.getElementById('cl-icon').textContent = meta.icon;
+  document.getElementById('cl-cat').textContent = meta.label;
+  const lines = [
+    pointAmount ? `+${pointAmount.toLocaleString()}점` : null,
+    moneyAmount ? `+₩${moneyAmount.toLocaleString()}` : null,
+  ].filter(Boolean);
+  document.getElementById('cl-amount').innerHTML = lines.map(l => `<span>${l}</span>`).join('');
+  const layer = document.getElementById('claim-layer');
+  layer.classList.remove('show');
+  void layer.offsetWidth; // 리플로우 강제 — 연속 수령 시 애니메이션 재시작되게
+  layer.classList.add('show');
+}
+document.getElementById('btn-claim-confirm').onclick = () => {
+  document.getElementById('claim-layer').classList.remove('show');
+};
+
+socket.on('eventClaimSuccess', ({ category, pointAmount, moneyAmount, singlePoints, multiBalance }) => {
+  me.singlePoints = singlePoints;
+  me.multiBalance = multiBalance;
+  updateMainScreen();
+  document.getElementById('event-msg').textContent = '';
+  if (eventData?.results?.[category]) eventData.results[category].claimed = true;
+  if (eventData) { renderEventResults(eventData); updateEventBadge(eventData); }
+  openClaimLayer(category, pointAmount, moneyAmount);
+});
+socket.on('eventClaimError', (msg) => {
+  document.getElementById('event-msg').style.color = '#ff6b6b';
+  document.getElementById('event-msg').textContent = msg;
+  if (eventData) renderEventResults(eventData);
+});
 
 // ── Help ───────────────────────────────────────────────────────────────
 document.getElementById('btn-help').onclick = () => showScreen('screen-help');

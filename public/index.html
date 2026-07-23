@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라</title>
-  <link rel="stylesheet" href="css/style.css?v=20">
+  <link rel="stylesheet" href="css/style.css?v=22">
 </head>
 <body>
   <div id="network-banner">🔌 연결이 끊겼습니다. 재연결 중...</div>
@@ -52,9 +52,10 @@
         </button>
       </div>
 
-      <div class="sub-menu">
+      <div class="sub-menu sub-menu5">
         <button id="btn-ranking" class="sub-item"><span class="sub-item-ic">🏅</span><span class="sub-item-lb">랭킹</span></button>
         <button id="btn-mystats" class="sub-item"><span class="sub-item-ic">📈</span><span class="sub-item-lb">통계</span></button>
+        <button id="btn-event" class="sub-item"><span class="sub-item-ic">🎁</span><span id="event-badge-dot" class="badge-dot" style="display:none"></span><span class="sub-item-lb">이벤트</span></button>
         <button id="btn-settings" class="sub-item"><span class="sub-item-ic">⚙️</span><span class="sub-item-lb">설정</span></button>
         <button id="btn-help" class="sub-item"><span class="sub-item-ic">❓</span><span class="sub-item-lb">도움말</span></button>
       </div>
@@ -254,6 +255,59 @@
     </div>
   </div>
 
+  <!-- Event Screen -->
+  <div id="screen-event" class="screen">
+    <div class="settings-box-v2">
+      <div class="v2-topbar">
+        <button id="btn-back-event" class="back-circle" aria-label="뒤로">←</button>
+        <h2>이벤트</h2>
+      </div>
+      <div class="event-period-badge">
+        <span id="event-dates" class="event-dates"></span>
+        <span class="event-live-tag"><span class="event-live-dot"></span>진행중</span>
+      </div>
+      <div class="event-content">
+        <div class="ms-group-label">이번 주 보상 안내</div>
+        <div class="guide-list">
+          <div class="guide-row"><span class="guide-ic">🏆</span><span class="guide-nm">최다승 · 싱글</span><span class="guide-rw">1000점</span></div>
+          <div class="guide-row"><span class="guide-ic">🏆</span><span class="guide-nm">최다승 · 멀티</span><span class="guide-rw">5만원</span></div>
+          <div class="guide-row"><span class="guide-ic">🎯</span><span class="guide-nm">최다판 · 싱글</span><span class="guide-rw">500점</span></div>
+          <div class="guide-row"><span class="guide-ic">🎯</span><span class="guide-nm">최다판 · 멀티</span><span class="guide-rw">25000원</span></div>
+          <div class="guide-row"><span class="guide-ic">✨</span><span class="guide-nm">최다훌라 · 합산</span><span class="guide-rw">1000점+5만원</span></div>
+        </div>
+        <div class="guide-cond">각 부문 싱글/멀티 3판 이상, 최다훌라는 합산 3판 이상부터 인정</div>
+        <div id="event-notice" class="guide-notice"></div>
+        <div id="event-msg" class="error-msg"></div>
+
+        <div class="event-tabs">
+          <button id="event-tab-live" class="event-tab">현황</button>
+          <button id="event-tab-result" class="event-tab active">결과</button>
+        </div>
+
+        <div id="event-panel-live">
+          <div class="ms-group-label">이번 주 현황 (진행중, 실시간)</div>
+          <div id="event-live-grid" class="live-grid"></div>
+        </div>
+
+        <div id="event-panel-result" class="active">
+          <div id="event-result-label" class="ms-group-label">지난 주 결과</div>
+          <div id="event-result-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="claim-layer" class="claim-layer">
+      <div class="claim-card">
+        <div class="cl-burst"></div>
+        <div id="cl-icon" class="cl-icon">🎁</div>
+        <div class="cl-title">이벤트 보상 획득!</div>
+        <div id="cl-cat" class="cl-cat"></div>
+        <div id="cl-amount" class="cl-amount"></div>
+        <button id="btn-claim-confirm" class="cl-confirm">확인</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Help Screen -->
   <div id="screen-help" class="screen">
     <div class="settings-box-v2">
@@ -310,7 +364,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/main.js?v=14"></script>
+  <script src="js/main.js?v=16"></script>
   <script src="js/presence.js?v=2"></script>
 </body>
 </html>

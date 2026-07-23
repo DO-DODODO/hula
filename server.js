@@ -14,6 +14,7 @@ const { decideDraw, decideActions, decideAttach, decideDiscard, isCardUseful, fi
 const { canAttach, cardName } = require('./game/cardUtils');
 const { getUserCount } = require('./db/database');
 const statsUtils = require('./game/statsUtils');
+const eventUtils = require('./game/eventUtils');
 
 const app = express();
 const server = http.createServer(app);
@@ -1730,6 +1731,89 @@ io.on('connection', (socket) => {
         me: { cumulative: myCumulativeAnchored.map(p => p.value), winRate: myTrend.winRate.map(p => p.value) },
         others
       }
+    });
+  });
+
+  // ── 주간 이벤트 ──────────────────────────────────────────────────────
+  socket.on('getEventStatus', async () => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+
+    const now = Math.floor(Date.now() / 1000);
+    const week = eventUtils.getCurrentAndLastWeek(now);
+
+    const [singleRows, multiRows, allUsers] = await Promise.all([
+      db.getAllGameResults('single'),
+      db.getAllGameResults('multi'),
+      db.getAllUsers(),
+    ]);
+    const userMap = new Map(allUsers.map(u => [u.userCode, u]));
+
+    const liveStats = eventUtils.aggregateUsersInRange(singleRows, multiRows, week.currentStartSec, week.currentEndSec);
+    const liveWinners = eventUtils.computeAllCategoryWinners(liveStats);
+
+    const lastStats = eventUtils.aggregateUsersInRange(singleRows, multiRows, week.lastStartSec, week.lastEndSec);
+    const lastWinners = eventUtils.computeAllCategoryWinners(lastStats);
+
+    const claimed = await db.getClaimedCategoriesForWeek(sess.userCode, week.lastStartKey);
+
+    const toPublicWinner = w => ({
+      value: w.value,
+      winners: w.winners.map(uc => ({
+        userCode: uc,
+        userName: userMap.get(uc)?.userName || uc,
+        avatar: userMap.get(uc)?.avatar || 'person',
+      })),
+    });
+
+    const live = {};
+    const results = {};
+    for (const key of Object.keys(eventUtils.EVENT_CATEGORIES)) {
+      const cfg = eventUtils.EVENT_CATEGORIES[key];
+      live[key] = { ...toPublicWinner(liveWinners[key]), minGames: cfg.minGames };
+      const r = lastWinners[key];
+      results[key] = {
+        ...toPublicWinner(r),
+        pointAmount: cfg.pointAmount,
+        moneyAmount: cfg.moneyAmount,
+        claimed: claimed.has(key),
+        isMine: r.winners.includes(sess.userCode),
+      };
+    }
+
+    socket.emit('eventStatus', {
+      currentStartSec: week.currentStartSec, currentLastDaySec: week.currentEndSec - 1,
+      lastStartSec: week.lastStartSec, lastLastDaySec: week.lastEndSec - 1,
+      live, results,
+    });
+  });
+
+  socket.on('claimEventReward', async ({ category } = {}) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    const cfg = eventUtils.EVENT_CATEGORIES[category];
+    if (!cfg) { socket.emit('eventClaimError', '잘못된 부문입니다'); return; }
+
+    // 승자 여부는 매번 현재 시각 기준으로 다시 계산 — 클라이언트가 보낸 주 정보를 신뢰하지 않음
+    // (다음 주로 넘어간 뒤엔 자동으로 "지난주"가 아니게 되어 청구가 막힘 = 완전 소멸 규칙 자연 적용)
+    const now = Math.floor(Date.now() / 1000);
+    const week = eventUtils.getCurrentAndLastWeek(now);
+    const [singleRows, multiRows] = await Promise.all([
+      db.getAllGameResults('single'),
+      db.getAllGameResults('multi'),
+    ]);
+    const lastStats = eventUtils.aggregateUsersInRange(singleRows, multiRows, week.lastStartSec, week.lastEndSec);
+    const w = eventUtils.computeCategoryWinner(lastStats, category);
+
+    if (!w.winners.includes(sess.userCode)) { socket.emit('eventClaimError', '수상자가 아닙니다'); return; }
+
+    const result = await db.claimEventReward(sess.userCode, week.lastStartKey, category, cfg.pointAmount, cfg.moneyAmount);
+    if (!result.ok) { socket.emit('eventClaimError', result.msg); return; }
+
+    const user = await db.getUser(sess.userCode);
+    socket.emit('eventClaimSuccess', {
+      category, pointAmount: cfg.pointAmount, moneyAmount: cfg.moneyAmount,
+      singlePoints: user.singlePoints, multiBalance: user.multiBalance,
     });
   });
 
