@@ -1752,11 +1752,6 @@ io.on('connection', (socket) => {
     const liveStats = eventUtils.aggregateUsersInRange(singleRows, multiRows, week.currentStartSec, week.currentEndSec);
     const liveWinners = eventUtils.computeAllCategoryWinners(liveStats);
 
-    const lastStats = eventUtils.aggregateUsersInRange(singleRows, multiRows, week.lastStartSec, week.lastEndSec);
-    const lastWinners = eventUtils.computeAllCategoryWinners(lastStats);
-
-    const claimed = await db.getClaimedCategoriesForWeek(sess.userCode, week.lastStartKey);
-
     const toPublicWinner = w => ({
       value: w.value,
       winners: w.winners.map(uc => ({
@@ -1768,10 +1763,17 @@ io.on('connection', (socket) => {
 
     const live = {};
     const results = {};
+    // 이벤트 첫 주 진행 중에는 "지난 주"가 아직 없음 — 배포 전부터 쌓여있던 과거 게임 기록으로
+    // 소급 집계하지 않고, 그냥 전부 빈 상태로 내려보냄(claimEventReward도 동일 기준으로 별도 차단).
+    const lastWinners = week.resultsAvailable
+      ? eventUtils.computeAllCategoryWinners(eventUtils.aggregateUsersInRange(singleRows, multiRows, week.lastStartSec, week.lastEndSec))
+      : null;
+    const claimed = week.resultsAvailable ? await db.getClaimedCategoriesForWeek(sess.userCode, week.lastStartKey) : new Set();
+
     for (const key of Object.keys(eventUtils.EVENT_CATEGORIES)) {
       const cfg = eventUtils.EVENT_CATEGORIES[key];
       live[key] = { ...toPublicWinner(liveWinners[key]), minGames: cfg.minGames };
-      const r = lastWinners[key];
+      const r = lastWinners ? lastWinners[key] : { winners: [], value: 0 };
       results[key] = {
         ...toPublicWinner(r),
         pointAmount: cfg.pointAmount,
@@ -1784,6 +1786,7 @@ io.on('connection', (socket) => {
     socket.emit('eventStatus', {
       currentStartSec: week.currentStartSec, currentLastDaySec: week.currentEndSec - 1,
       lastStartSec: week.lastStartSec, lastLastDaySec: week.lastEndSec - 1,
+      resultsAvailable: week.resultsAvailable,
       live, results,
     });
   });
@@ -1798,6 +1801,7 @@ io.on('connection', (socket) => {
     // (다음 주로 넘어간 뒤엔 자동으로 "지난주"가 아니게 되어 청구가 막힘 = 완전 소멸 규칙 자연 적용)
     const now = Math.floor(Date.now() / 1000);
     const week = eventUtils.getCurrentAndLastWeek(now);
+    if (!week.resultsAvailable) { socket.emit('eventClaimError', '아직 첫 주 진행 중이라 받을 보상이 없습니다'); return; }
     const [singleRows, multiRows] = await Promise.all([
       db.getAllGameResults('single'),
       db.getAllGameResults('multi'),

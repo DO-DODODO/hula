@@ -6,6 +6,11 @@ const { dayKeyKST, todayKeyKST } = require('./statsUtils');
 
 const EVENT_ANCHOR_DOW = 4; // 이벤트 주 시작 요일: 목요일 (0=일,1=월,...,4=목,...,6=토)
 
+// 이벤트 기능이 실제로 시작된 주(첫 배포일). 이 날짜보다 이전 주는 "지난 주 결과"로
+// 절대 집계하지 않는다 — 안 그러면 기능 배포 전부터 쌓여있던 기존 게임 기록을 가지고
+// 소급해서 "이미 우승/보상 확정"된 것처럼 보여주게 되어 사용자가 의도한 시작 시점과 어긋남.
+const EVENT_LAUNCH_WEEK_KEY = '2026-07-23';
+
 const EVENT_CATEGORIES = {
   winsSingle: { mode: 'single', metric: 'wins', minGames: 3, pointAmount: 1000, moneyAmount: 0, label: '최다승 · 싱글' },
   winsMulti: { mode: 'multi', metric: 'wins', minGames: 3, pointAmount: 0, moneyAmount: 50000, label: '최다승 · 멀티' },
@@ -34,14 +39,17 @@ function getCurrentAndLastWeek(nowSec) {
   const currentEndSec = currentStartSec + 7 * 86400;
   const lastStartSec = currentStartSec - 7 * 86400;
   const lastEndSec = currentStartSec;
+  const lastStartKey = dayKeyKST(lastStartSec);
   return {
     currentStartSec, currentEndSec,
     lastStartSec, lastEndSec,
     currentStartKey: dayKeyKST(currentStartSec),
     currentEndKey: dayKeyKST(currentEndSec - 1),
-    lastStartKey: dayKeyKST(lastStartSec),
+    lastStartKey,
     lastEndKey: dayKeyKST(lastEndSec - 1),
     nowKey: dayKeyKST(nowSec),
+    // 첫 이벤트 주(EVENT_LAUNCH_WEEK_KEY) 진행 중에는 아직 "지난 주"가 존재하지 않음
+    resultsAvailable: lastStartKey >= EVENT_LAUNCH_WEEK_KEY,
   };
 }
 
@@ -100,7 +108,7 @@ function computeAllCategoryWinners(stats) {
 }
 
 module.exports = {
-  EVENT_ANCHOR_DOW, EVENT_CATEGORIES,
+  EVENT_ANCHOR_DOW, EVENT_CATEGORIES, EVENT_LAUNCH_WEEK_KEY,
   getWeekStartSec, getCurrentAndLastWeek,
   aggregateUsersInRange, computeCategoryWinner, computeAllCategoryWinners,
 };

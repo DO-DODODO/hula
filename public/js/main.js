@@ -950,6 +950,11 @@ function renderEventResults(data) {
   document.getElementById('event-result-label').textContent =
     `지난 주 결과 (${msFormatCardDate(data.lastStartSec)} ~ ${msFormatCardDate(data.lastLastDaySec)})`;
 
+  if (!data.resultsAvailable) {
+    list.innerHTML = `<div class="result-card"><div class="rc-empty">🎉 이벤트 첫 주가 진행 중이에요 — 다음 주부터 결과가 나와요</div></div>`;
+    return;
+  }
+
   list.innerHTML = EVENT_CATEGORY_ORDER.map(key => {
     const meta = EVENT_CATEGORY_META[key];
     const c = data.results[key];
