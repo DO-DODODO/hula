@@ -96,7 +96,28 @@ socket.on('disconnect', () => {
 });
 
 let initialConnectDone = false;
-socket.on('loginSuccess', () => {
+// 카드 뒷면 스킨 — 순전히 내 화면 렌더링용. body에 스킨 클래스 하나 붙이면
+// CSS가 알아서 모든 뒷면 카드(상대손패/덱/애니메이션)에 적용해줌(style.css 참고).
+// 모드(싱글/멀티)별로 역대 최고 보유량 기준이 달라서, 지금 이 게임의 모드에서
+// 실제로 조건을 채웠는지 매번 다시 계산해서 적용한다.
+const CARD_SKINS = {
+  basic: { free: true },
+  wine: { free: true },
+  sea: { free: false, singleReq: 10000, multiReq: 1100000 },
+  watermelon: { free: false, singleReq: 50000, multiReq: 1300000 },
+  dolphin: { free: false, singleReq: 100000, multiReq: 1500000 },
+};
+function applyCardSkin({ selectedCardSkin, peakSinglePoints, peakMultiBalance }) {
+  const cfg = CARD_SKINS[selectedCardSkin];
+  const usable = cfg && (cfg.free ||
+    (gameMode === 'multi' ? peakMultiBalance >= cfg.multiReq : peakSinglePoints >= cfg.singleReq));
+  const effective = usable ? selectedCardSkin : 'basic';
+  document.body.classList.remove('skin-wine', 'skin-sea', 'skin-watermelon', 'skin-dolphin');
+  if (effective !== 'basic') document.body.classList.add('skin-' + effective);
+}
+
+socket.on('loginSuccess', (payload) => {
+  if (payload) applyCardSkin(payload);
   if (gameMode === 'single' && !gameState && !initialConnectDone) {
     initialConnectDone = true;
     socket.emit('startSingle');

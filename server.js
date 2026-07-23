@@ -15,6 +15,7 @@ const { canAttach, cardName } = require('./game/cardUtils');
 const { getUserCount } = require('./db/database');
 const statsUtils = require('./game/statsUtils');
 const eventUtils = require('./game/eventUtils');
+const cardSkins = require('./game/cardSkins');
 
 const app = express();
 const server = http.createServer(app);
@@ -845,6 +846,9 @@ io.on('connection', (socket) => {
       singlePoints: user.singlePoints, multiBalance: user.multiBalance,
       winMessage: user.winMessage, avatar: user.avatar || 'person',
       showOnline: user.showOnline !== 0,
+      selectedCardSkin: user.selectedCardSkin || 'basic',
+      peakSinglePoints: user.peakSinglePoints ?? user.singlePoints,
+      peakMultiBalance: user.peakMultiBalance ?? user.multiBalance,
       ...myBadges
     });
     // 멀티 방 재연결: 싱글보다 멀티 우선
@@ -941,6 +945,22 @@ io.on('connection', (socket) => {
     await db.updateUser(sess.userCode, { showOnline: show ? 1 : 0 });
     socket.emit('showOnlineSaved', { show: !!show });
     broadcastPresence();
+  });
+
+  socket.on('setCardSkin', async ({ skin } = {}) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    if (!cardSkins.CARD_SKINS[skin]) { socket.emit('cardSkinError', '잘못된 스킨입니다'); return; }
+    const user = await db.getUser(sess.userCode);
+    if (!user) return;
+    const peakSingle = user.peakSinglePoints ?? user.singlePoints;
+    const peakMulti = user.peakMultiBalance ?? user.multiBalance;
+    if (!cardSkins.isSkinSelectable(skin, peakSingle, peakMulti)) {
+      socket.emit('cardSkinError', '아직 잠금해제 조건을 채우지 못했습니다');
+      return;
+    }
+    await db.updateUser(sess.userCode, { selectedCardSkin: skin });
+    socket.emit('cardSkinSaved', { skin });
   });
 
   socket.on('presenceVisible', () => {

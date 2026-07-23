@@ -38,6 +38,22 @@ async function init() {
   try {
     await db.query(sql`ALTER TABLE users ADD COLUMN multiHulaWins INTEGER DEFAULT 0`);
   } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
+  // 카드 뒷면 스킨: 역대 최고 보유량 기준으로 영구 잠금해제(A안)라 "역대 최고"를 별도 추적해야 함
+  let addedPeakColumns = false;
+  try {
+    await db.query(sql`ALTER TABLE users ADD COLUMN selectedCardSkin TEXT DEFAULT 'basic'`);
+  } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
+  try {
+    await db.query(sql`ALTER TABLE users ADD COLUMN peakSinglePoints INTEGER DEFAULT 100`);
+    addedPeakColumns = true;
+  } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
+  try {
+    await db.query(sql`ALTER TABLE users ADD COLUMN peakMultiBalance INTEGER DEFAULT 1000000`);
+  } catch (e) { /* 이미 컬럼이 있으면 무시 */ }
+  if (addedPeakColumns) {
+    // 컬럼을 방금 새로 추가한 거면, 이미 존재하던 유저들의 역대 최고치를 현재 보유량 밑으로 내려가지 않게 보정
+    await db.query(sql`UPDATE users SET peakSinglePoints = MAX(peakSinglePoints, singlePoints), peakMultiBalance = MAX(peakMultiBalance, multiBalance)`);
+  }
 
   await db.query(sql`
     CREATE TABLE IF NOT EXISTS game_results (
@@ -134,6 +150,7 @@ async function saveGameResult(gameId, mode, results, isHula = false, continuedFr
       await db.query(sql`
         UPDATE users SET
           multiBalance = MAX(0, multiBalance + ${r.pointChange}),
+          peakMultiBalance = MAX(peakMultiBalance, MAX(0, multiBalance + ${r.pointChange})),
           multiWins = multiWins + ${r.rank === 1 ? 1 : 0},
           multiGames = multiGames + 1,
           multiHulaWins = multiHulaWins + ${isHulaWinner ? 1 : 0}
@@ -143,6 +160,7 @@ async function saveGameResult(gameId, mode, results, isHula = false, continuedFr
       await db.query(sql`
         UPDATE users SET
           singlePoints = MAX(0, singlePoints + ${r.pointChange}),
+          peakSinglePoints = MAX(peakSinglePoints, MAX(0, singlePoints + ${r.pointChange})),
           singleWins = singleWins + ${r.rank === 1 ? 1 : 0},
           singleGames = singleGames + 1,
           singleHulaWins = singleHulaWins + ${isHulaWinner ? 1 : 0}
@@ -224,9 +242,9 @@ async function chargeBalance(userCode, mode) {
 
   const amount = mode === 'multi' ? 10000 : 100;
   if (mode === 'multi') {
-    await db.query(sql`UPDATE users SET multiBalance = multiBalance + ${amount}, lastMultiCharge = ${now} WHERE userCode = ${userCode}`);
+    await db.query(sql`UPDATE users SET multiBalance = multiBalance + ${amount}, peakMultiBalance = MAX(peakMultiBalance, multiBalance + ${amount}), lastMultiCharge = ${now} WHERE userCode = ${userCode}`);
   } else {
-    await db.query(sql`UPDATE users SET singlePoints = singlePoints + ${amount}, lastSingleCharge = ${now} WHERE userCode = ${userCode}`);
+    await db.query(sql`UPDATE users SET singlePoints = singlePoints + ${amount}, peakSinglePoints = MAX(peakSinglePoints, singlePoints + ${amount}), lastSingleCharge = ${now} WHERE userCode = ${userCode}`);
   }
   return { ok: true, amount };
 }
@@ -254,10 +272,10 @@ async function claimEventReward(userCode, weekStart, category, pointAmount, mone
     return { ok: false, msg: '오류가 발생했습니다' };
   }
   if (pointAmount) {
-    await db.query(sql`UPDATE users SET singlePoints = singlePoints + ${pointAmount} WHERE userCode = ${userCode}`);
+    await db.query(sql`UPDATE users SET singlePoints = singlePoints + ${pointAmount}, peakSinglePoints = MAX(peakSinglePoints, singlePoints + ${pointAmount}) WHERE userCode = ${userCode}`);
   }
   if (moneyAmount) {
-    await db.query(sql`UPDATE users SET multiBalance = multiBalance + ${moneyAmount} WHERE userCode = ${userCode}`);
+    await db.query(sql`UPDATE users SET multiBalance = multiBalance + ${moneyAmount}, peakMultiBalance = MAX(peakMultiBalance, multiBalance + ${moneyAmount}) WHERE userCode = ${userCode}`);
   }
   return { ok: true };
 }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라</title>
-  <link rel="stylesheet" href="css/style.css?v=22">
+  <link rel="stylesheet" href="css/style.css?v=23">
 </head>
 <body>
   <div id="network-banner">🔌 연결이 끊겼습니다. 재연결 중...</div>
@@ -50,6 +50,15 @@
           </span>
           <span class="mode-card-go">›</span>
         </button>
+      </div>
+
+      <div id="skin-banner" class="skin-banner" style="display:none">
+        <div class="sb-thumb"></div>
+        <div class="sb-text">
+          <div class="sb-title">🎴 설정에서 카드 뒷면 디자인을 골라보세요</div>
+          <div class="sb-sub">새로운 카드 스킨이 도착했어요!</div>
+        </div>
+        <div class="sb-go">›</div>
       </div>
 
       <div class="sub-menu sub-menu5">
@@ -164,6 +173,12 @@
           </div>
 
           <button id="btn-save-message" class="btn-save">저장</button>
+        </div>
+
+        <div class="v2-card highlight">
+          <div class="card-head"><span class="ic">🎴</span><span class="tt">카드 뒷면</span></div>
+          <div id="skin-grid" class="skin-grid"></div>
+          <div id="skin-msg"></div>
         </div>
 
         <div class="stat-grid">
@@ -364,7 +379,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/main.js?v=16"></script>
+  <script src="js/main.js?v=17"></script>
   <script src="js/presence.js?v=2"></script>
 </body>
 </html>

@@ -185,6 +185,34 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .stat-card .value { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .btn-charge { align-self: flex-start; padding: 5px 12px; border-radius: 20px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); color: #fff; font-size: 11px; cursor: pointer; }
 
+/* ── 카드 뒷면 스킨 선택(설정 화면) ─────────────────────────────────────── */
+.v2-card.highlight { border-color: rgba(255,210,74,0.5); background: rgba(255,210,74,0.06); }
+.skin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.skin-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.skin-thumb { width: 100%; aspect-ratio: 5/7; border-radius: 8px; background-size: cover; background-position: center; border: 2px solid transparent; box-shadow: 0 3px 8px rgba(0,0,0,0.35); position: relative; cursor: pointer; }
+.skin-thumb.selected { border-color: var(--double); box-shadow: 0 0 0 2px rgba(255,210,74,0.3), 0 3px 10px rgba(0,0,0,0.4); }
+.skin-thumb .lock-badge { position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; font-size: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.skin-name { font-size: 10.5px; font-weight: 800; color: #fff; }
+.skin-status { font-size: 8.5px; color: var(--text-dim); text-align: center; line-height: 1.4; }
+.skin-status.ok { color: #7fd88f; }
+.skin-status .cond-line { display: block; }
+.skin-status .cond-line.met { color: #7fd88f; }
+.skin-status .cond-line.unmet { color: #e08f8f; }
+#skin-msg { font-size: 10.5px; color: var(--double); text-align: center; margin-top: 10px; min-height: 14px; }
+
+/* ── 메인화면 카드 스킨 배너 ─────────────────────────────────────────── */
+.skin-banner {
+  margin: 4px 0 14px; padding: 12px 14px; border-radius: 14px;
+  background: linear-gradient(120deg, rgba(255,210,74,0.18), rgba(255,210,74,0.05));
+  border: 1px solid rgba(255,210,74,0.4);
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+}
+.skin-banner .sb-thumb { width: 34px; height: 46px; border-radius: 5px; flex-shrink: 0; background-size: cover; background-position: center; box-shadow: 0 3px 8px rgba(0,0,0,0.4); background-image: url('../img/card-sea.png'); }
+.skin-banner .sb-text { flex: 1; }
+.skin-banner .sb-title { font-size: 12px; font-weight: 800; color: #fff; }
+.skin-banner .sb-sub { font-size: 10px; color: var(--double); margin-top: 2px; }
+.skin-banner .sb-go { font-size: 15px; color: var(--text-dim); }
+
 /* 도움말 카드 내부 텍스트 */
 .v2-card .card-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
 .v2-card .card-head .ic { font-size: 16px; }
@@ -541,6 +569,13 @@ tr.presence-clickable:hover { background: rgba(201,168,76,0.12); }
 .card.red { color: var(--card-red); }
 .card.black { color: var(--card-black); }
 .card.card-back { background: linear-gradient(135deg, #1a3a6b 0%, #2d5fa6 100%); border-color: #1a3a6b; }
+/* 카드 뒷면 스킨 — 순전히 내 화면 렌더링용(다른 사람에게 전달 안 됨), 상대 손패/덱 뒷면에 전부 적용 */
+/* body에 스킨 클래스 하나만 붙이면 그 화면의 모든 뒷면 카드(상대손패/덱/애니메이션 전부)에 자동 적용됨 —
+   card-back을 만드는 곳마다 일일이 스킨 클래스를 안 붙여도 되게 body 스코프로 처리 */
+body.skin-wine .card.card-back { background: linear-gradient(135deg, #6b1a35 0%, #a62d5f 100%); border-color: #6b1a35; }
+body.skin-sea .card.card-back { background-image: url('../img/card-sea.png'); background-size: cover; background-position: center; border-color: #6ab6f2; }
+body.skin-watermelon .card.card-back { background-image: url('../img/card-watermelon.png'); background-size: cover; background-position: center; border-color: #7cb96f; }
+body.skin-dolphin .card.card-back { background-image: url('../img/card-dolphin.png'); background-size: cover; background-position: center; border-color: #b9d4ea; }
 .card.small { width: clamp(32px, 3.5vw, 52px); height: clamp(46px, 5vw, 72px); font-size: clamp(9px, 1vw, 13px); }
 .card.tiny { width: clamp(24px, 2.5vw, 38px); height: clamp(34px, 3.5vw, 54px); font-size: clamp(8px, 0.8vw, 11px); }
 

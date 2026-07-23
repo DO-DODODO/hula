@@ -91,7 +91,20 @@ function updateMainScreen() {
   document.getElementById('multi-balance').textContent = `₩${me.multiBalance?.toLocaleString()} 보유`;
   const avatarEl = document.getElementById('main-avatar');
   if (avatarEl) avatarEl.textContent = (AVATARS.find(a => a.key === me.avatar) || AVATARS[0]).emoji;
+  updateSkinBanner();
 }
+
+// 카드 뒷면 스킨 배너 — 배포일로부터 3일간만 노출(고정 배포일 기준, 이벤트 기능과 동일 패턴)
+const CARD_SKIN_BANNER_LAUNCH = new Date('2026-07-23T00:00:00+09:00').getTime();
+function updateSkinBanner() {
+  const banner = document.getElementById('skin-banner');
+  if (!banner) return;
+  const withinWindow = Date.now() - CARD_SKIN_BANNER_LAUNCH < 3 * 86400 * 1000;
+  banner.style.display = withinWindow ? '' : 'none';
+}
+document.getElementById('skin-banner')?.addEventListener('click', () => {
+  document.getElementById('btn-settings').click();
+});
 
 // ── Single Mode ────────────────────────────────────────────────────────
 document.getElementById('btn-single').onclick = () => {
@@ -362,6 +375,80 @@ function renderAvatarGrid(currentAvatar) {
   });
 }
 
+// ── 카드 뒷면 스킨 ─────────────────────────────────────────────────────
+// game/cardSkins.js와 동일한 정의(서버가 최종 검증하므로 클라이언트는 표시용)
+const CARD_SKINS = {
+  basic: { free: true, label: '기본색' },
+  wine: { free: true, label: '와인색' },
+  sea: { free: false, singleReq: 10000, multiReq: 1100000, label: '바다' },
+  watermelon: { free: false, singleReq: 50000, multiReq: 1300000, label: '수박' },
+  dolphin: { free: false, singleReq: 100000, multiReq: 1500000, label: '돌고래' },
+};
+const SKIN_ORDER = ['basic', 'wine', 'sea', 'watermelon', 'dolphin'];
+const SKIN_THUMB_STYLE = {
+  basic: 'background: linear-gradient(135deg, #1a3a6b 0%, #2d5fa6 100%);',
+  wine: 'background: linear-gradient(135deg, #6b1a35 0%, #a62d5f 100%);',
+  sea: "background-image:url('img/card-sea.png');background-size:cover;background-position:center;",
+  watermelon: "background-image:url('img/card-watermelon.png');background-size:cover;background-position:center;",
+  dolphin: "background-image:url('img/card-dolphin.png');background-size:cover;background-position:center;",
+};
+
+function renderSkinGrid() {
+  const grid = document.getElementById('skin-grid');
+  if (!grid) return;
+  const peakSingle = me.peakSinglePoints ?? me.singlePoints ?? 0;
+  const peakMulti = me.peakMultiBalance ?? me.multiBalance ?? 0;
+  const selected = me.selectedCardSkin || 'basic';
+
+  grid.innerHTML = SKIN_ORDER.map(key => {
+    const cfg = CARD_SKINS[key];
+    const singleMet = cfg.free || peakSingle >= (cfg.singleReq || 0);
+    const multiMet = cfg.free || peakMulti >= (cfg.multiReq || 0);
+    const selectable = cfg.free || singleMet || multiMet;
+    const lockHtml = selectable ? '' : '<span class="lock-badge">🔒</span>';
+    const statusHtml = cfg.free
+      ? `<div class="skin-status ok">${key === selected ? '사용 중' : '사용 가능'}</div>`
+      : `<div class="skin-status">
+          <span class="cond-line ${singleMet ? 'met' : 'unmet'}">${singleMet ? '✓' : ''} 싱글 ${cfg.singleReq.toLocaleString()}P${singleMet ? '' : ' 필요'}</span>
+          <span class="cond-line ${multiMet ? 'met' : 'unmet'}">${multiMet ? '✓' : ''} 멀티 ₩${cfg.multiReq.toLocaleString()}${multiMet ? '' : ' 필요'}</span>
+        </div>`;
+    return `<div class="skin-item">
+      <div class="skin-thumb${key === selected ? ' selected' : ''}" data-skin="${key}" style="${SKIN_THUMB_STYLE[key]}">${lockHtml}</div>
+      <div class="skin-name">${cfg.label}</div>
+      ${statusHtml}
+    </div>`;
+  }).join('');
+
+  grid.querySelectorAll('.skin-thumb').forEach(el => {
+    el.onclick = () => {
+      const key = el.dataset.skin;
+      const cfg = CARD_SKINS[key];
+      const peakSingle2 = me.peakSinglePoints ?? me.singlePoints ?? 0;
+      const peakMulti2 = me.peakMultiBalance ?? me.multiBalance ?? 0;
+      const selectable = cfg.free || peakSingle2 >= (cfg.singleReq || 0) || peakMulti2 >= (cfg.multiReq || 0);
+      const msg = document.getElementById('skin-msg');
+      if (!selectable) {
+        msg.style.color = '#e08f8f';
+        msg.textContent = `🔒 "${cfg.label}"은(는) 싱글 ${cfg.singleReq.toLocaleString()}P 또는 멀티 ₩${cfg.multiReq.toLocaleString()} 달성 시 선택할 수 있어요`;
+        return;
+      }
+      socket.emit('setCardSkin', { skin: key });
+    };
+  });
+}
+socket.on('cardSkinSaved', ({ skin }) => {
+  me.selectedCardSkin = skin;
+  renderSkinGrid();
+  const msg = document.getElementById('skin-msg');
+  msg.style.color = '#7fd88f';
+  msg.textContent = `"${CARD_SKINS[skin].label}"(으)로 선택했어요`;
+});
+socket.on('cardSkinError', (m) => {
+  const msg = document.getElementById('skin-msg');
+  msg.style.color = '#e08f8f';
+  msg.textContent = m;
+});
+
 document.getElementById('btn-settings').onclick = () => {
   document.getElementById('input-win-message').value = me.winMessage || '';
   document.getElementById('single-points-display').textContent = `${me.singlePoints?.toLocaleString()}점`;
@@ -370,6 +457,8 @@ document.getElementById('btn-settings').onclick = () => {
   document.getElementById('settings-avatar-big').textContent = (AVATARS.find(a => a.key === me.avatar) || AVATARS[0]).emoji;
   document.getElementById('settings-profile-name').innerHTML = nameWithBadges(me);
   renderAvatarGrid(me.avatar || 'person');
+  renderSkinGrid();
+  document.getElementById('skin-msg').textContent = '';
   if (isAdmin) {
     document.getElementById('admin-settings').style.display = '';
     document.getElementById('admin-login-area').style.display = 'none';
