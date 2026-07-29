@@ -266,7 +266,7 @@ function resumeIfInvitePaused(userCode) {
   if (!g || !g.paused || g.pausedReason !== 'invite') return;
   g.paused = false;
   g.pausedReason = null;
-  const remaining = g.timerRemainingMs ?? 45000;
+  const remaining = g.timerRemainingMs ?? 30000;
   g.timerRemainingMs = null;
   broadcastGame(g);
   const cur = getCurrentPlayer(g);
@@ -389,7 +389,7 @@ async function snapshotRank1(game) {
 
 // ── Timer ──────────────────────────────────────────────────────────────────
 
-function startTimer(game, durationMs = 45000) {
+function startTimer(game, durationMs = 30000) {
   clearTimer(game);
   game.timerStart = Date.now();
   game.timer = setTimeout(() => handleTimeout(game), durationMs);
@@ -999,7 +999,7 @@ io.on('connection', (socket) => {
     if (wasPlayingSingle) {
       targetSingle.paused = true;
       targetSingle.pausedReason = 'invite';
-      targetSingle.timerRemainingMs = targetSingle.timerStart ? Math.max(0, 45000 - (Date.now() - targetSingle.timerStart)) : 45000;
+      targetSingle.timerRemainingMs = targetSingle.timerStart ? Math.max(0, 30000 - (Date.now() - targetSingle.timerStart)) : 30000;
       clearTimer(targetSingle);
       clearThankYouTimeout(targetSingle);
       broadcastGame(targetSingle);
@@ -1454,7 +1454,7 @@ io.on('connection', (socket) => {
     const game = getPlayerGame(sess.userCode);
     if (!game || game.mode !== 'single' || game.status !== 'playing') return;
     game.paused = true;
-    game.timerRemainingMs = game.timerStart ? Math.max(0, 45000 - (Date.now() - game.timerStart)) : 45000;
+    game.timerRemainingMs = game.timerStart ? Math.max(0, 30000 - (Date.now() - game.timerStart)) : 30000;
     clearTimer(game);
     clearThankYouTimeout(game);
     broadcastGame(game);
@@ -1466,7 +1466,7 @@ io.on('connection', (socket) => {
     const game = getPlayerGame(sess.userCode);
     if (!game || game.mode !== 'single' || game.status !== 'playing') return;
     game.paused = false;
-    const remaining = game.timerRemainingMs ?? 45000;
+    const remaining = game.timerRemainingMs ?? 30000;
     game.timerRemainingMs = null;
     broadcastGame(game);
     const cur = getCurrentPlayer(game);

@@ -52,7 +52,7 @@ let wakeLock = null;
 let selectedCards = new Set();
 let selectPortals = new Map(); // cardId → position:fixed로 body에 띄운 "선택 카드" 복제본
 let timerInterval = null;
-let timerSeconds = 45;
+let timerSeconds = 30;
 let savedTimerRemaining = null;
 let thankYouLocked = false;
 let attachMode = false;
@@ -190,7 +190,7 @@ socket.on('gameState', (state) => {
     clearInterval(timerInterval);
     savedTimerRemaining = state.timerRemainingMs ?? null;
   } else if (!state.paused && wasPaused) {
-    const startSec = savedTimerRemaining != null ? Math.round(savedTimerRemaining / 1000) : 45;
+    const startSec = savedTimerRemaining != null ? Math.round(savedTimerRemaining / 1000) : 30;
     savedTimerRemaining = null;
     updateTimer(startSec);
   }
@@ -972,7 +972,7 @@ function updateActionButtons(me) {
 }
 
 // ── Timer ──────────────────────────────────────────────────────────────
-function updateTimer(startSeconds = 45) {
+function updateTimer(startSeconds = 30) {
   if (!gameState) return;
   if (timerInterval) clearInterval(timerInterval);
 
@@ -982,8 +982,8 @@ function updateTimer(startSeconds = 45) {
 
   // 내 차례가 아니면 카운트다운 안 함
   if (!isMyTurn()) {
-    timerSeconds = 45;
-    text.textContent = '45';
+    timerSeconds = 30;
+    text.textContent = '30';
     circle.style.strokeDashoffset = '0';
     circle.classList.remove('urgent');
     return;
@@ -993,7 +993,7 @@ function updateTimer(startSeconds = 45) {
 
   function tick() {
     text.textContent = timerSeconds;
-    const offset = circumference * (1 - timerSeconds / 45);
+    const offset = circumference * (1 - timerSeconds / 30);
     circle.style.strokeDashoffset = offset;
     circle.classList.toggle('urgent', timerSeconds <= 15);
     if (timerSeconds <= 0) clearInterval(timerInterval);
