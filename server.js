@@ -63,6 +63,10 @@ function broadcastGame(game) {
     for (const uc of room.waiters) {
       emitToPlayer(uc, 'gameState', getPublicState(game, uc));
     }
+    // 순수 관전자: 정원과 무관하게 모든 패를 공개해서 보여줌
+    for (const uc of room.spectators) {
+      emitToPlayer(uc, 'gameState', getPublicState(game, uc, true));
+    }
   }
 }
 
@@ -77,6 +81,7 @@ function findRoomOfUser(userCode) {
   for (const room of rooms.values()) {
     if (room.members.has(userCode)) return room;
     if (room.waiters.has(userCode)) return room;
+    if (room.spectators.has(userCode)) return room;
     if (room.game?.players.some(p => p.userCode === userCode)) return room;
     // 게임 종료 후 "한 판 더" 준비 단계: members도 비어있고 game도 null이라 lastGamePlayers로도 찾아야 함
     if (room.lastGamePlayers?.some(p => p.userCode === userCode)) return room;
@@ -90,10 +95,14 @@ function isAvailableForRoom(userCode) {
   for (const room of rooms.values()) {
     if (room.members.has(userCode)) return false;
     if (room.waiters.has(userCode)) return false;
+    if (room.spectators.has(userCode)) return false;
     if (room.game?.players.some(p => p.userCode === userCode && !p.isAI)) return false;
   }
   return true;
 }
+
+// 관전(순수 관전, 정원과 무관하게 언제든 입장 가능·모든 패 공개) 정원
+const SPECTATOR_CAP = 2;
 
 function roomSummary(room) {
   const playing = !!room.game && room.game.status === 'playing';
@@ -106,21 +115,25 @@ function roomSummary(room) {
     playing,
     waitingCount: playing ? room.waiters.size : 0,
     waitingCap: playing ? Math.max(0, 4 - humanCount) : 0,
+    spectatorCount: room.spectators.size,
+    spectatorCap: SPECTATOR_CAP,
   };
 }
 
-// 대기자 전원 이름을 방 참가자(플레이어) + 대기자 모두에게 알림 ("OOO, OOO님 대기중" 뱃지용)
+// 대기자+관전자 인원수를 방 참가자/대기자/관전자 전원에게 알림 ("대기 N" / "관전 N" 뱃지용)
 // room.game이 게임 종료 직후 "한 판 더" 준비 단계에서 null이 되는 구간에도(room.lastGamePlayers로) 갱신을 보내야
-// 그 구간에 대기자가 빠지거나 타임아웃될 때 뱃지가 실시간으로 사라진다.
-function broadcastWaiterList(room) {
-  const recipients = room.game ? room.game.players : room.lastGamePlayers;
-  if (!recipients) return;
-  const names = [...room.waiters].map(uc => sessions.get(getSocketId(uc))?.userName).filter(Boolean);
-  const payload = { count: room.waiters.size, names };
+// 그 구간에 대기자/관전자가 빠지거나 타임아웃될 때 뱃지가 실시간으로 사라진다.
+// 게임이 한 번도 시작 안 된 순수 로비 상태(room.members만 있음)에서도 관전은 항상 가능하므로 그 경우도 커버한다.
+function broadcastWaitSpectateStatus(room) {
+  const recipients = room.game ? room.game.players
+    : room.lastGamePlayers ? room.lastGamePlayers
+    : [...room.members].map(uc => ({ userCode: uc, isAI: false }));
+  const payload = { waiterCount: room.waiters.size, spectatorCount: room.spectators.size };
   for (const p of recipients) {
-    if (!p.isAI) emitToPlayer(p.userCode, 'waiterList', payload);
+    if (!p.isAI) emitToPlayer(p.userCode, 'waitSpectateStatus', payload);
   }
-  for (const uc of room.waiters) emitToPlayer(uc, 'waiterList', payload);
+  for (const uc of room.waiters) emitToPlayer(uc, 'waitSpectateStatus', payload);
+  for (const uc of room.spectators) emitToPlayer(uc, 'waitSpectateStatus', payload);
 }
 
 function broadcastRoomList() {
@@ -145,7 +158,7 @@ function scheduleWaiterLeave(room, userCode) {
       room.readyPhase.deadlines.delete(userCode);
       room.readyPhase.timers.delete(userCode);
     }
-    broadcastWaiterList(room);
+    broadcastWaitSpectateStatus(room);
     broadcastRoomList();
     checkAndCloseIfAlone(room);
   }, WAITER_LEAVE_GRACE_MS);
@@ -156,9 +169,31 @@ function cancelWaiterLeave(room, userCode) {
   if (t) { clearTimeout(t); room.waiterLeaveTimers.delete(userCode); }
 }
 
+// 관전자도 대기자와 동일한 이유(페이지 이동 시 순간 재연결)로 유예를 두고 내보낸다.
+// 대기자와 달리 관전자는 방/게임 상태에 아무 영향을 주지 않으므로(정원·재시작 로직 등에 관여 안 함)
+// 그냥 명단에서 빼고 뱃지/목록만 갱신하면 된다.
+const SPECTATOR_LEAVE_GRACE_MS = 6000;
+function scheduleSpectatorLeave(room, userCode) {
+  const existing = room.spectatorLeaveTimers.get(userCode);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    room.spectatorLeaveTimers.delete(userCode);
+    if (!room.spectators.has(userCode)) return;
+    room.spectators.delete(userCode);
+    broadcastWaitSpectateStatus(room);
+    broadcastRoomList();
+  }, SPECTATOR_LEAVE_GRACE_MS);
+  room.spectatorLeaveTimers.set(userCode, t);
+}
+function cancelSpectatorLeave(room, userCode) {
+  const t = room.spectatorLeaveTimers.get(userCode);
+  if (t) { clearTimeout(t); room.spectatorLeaveTimers.delete(userCode); }
+}
+
 // 게임 종료 후 "한 판 더" 준비 단계에서, 온라인 인원(기존 참가자+대기자)이 1명 이하로 줄면
 // 남은 사람도 메인으로 돌려보내고 방을 정리한다. startReadyPhase 최초 진입 시 + 준비 단계 중
-// 누군가 연결이 끊길 때마다 재검사한다.
+// 누군가 연결이 끊길 때마다 재검사한다. 관전자는 방 존속 여부와 무관하므로 인원수 계산엔 안 들어가지만,
+// 방이 실제로 정리될 땐 관전자도 내보내야 한다.
 function checkAndCloseIfAlone(room) {
   if (!room.lastGamePlayers || room.game) return false;
   const onlineHumans = room.lastGamePlayers.filter(p => !p.isAI && getSocketId(p.userCode));
@@ -166,8 +201,15 @@ function checkAndCloseIfAlone(room) {
   if (onlineHumans.length + onlineWaiters.length > 1) return false;
   for (const p of onlineHumans) emitToPlayer(p.userCode, 'playAgainError', '함께할 사람이 없어 메인으로 돌아갑니다.');
   for (const uc of onlineWaiters) emitToPlayer(uc, 'playAgainError', '함께할 사람이 없어 메인으로 돌아갑니다.');
+  for (const uc of room.spectators) {
+    const sid = getSocketId(uc);
+    const s = sid && sessions.get(sid);
+    if (s) s.roomId = null;
+    emitToPlayer(uc, 'roomClosed', { reason: '방이 사라졌어요' });
+  }
   if (room.readyPhase) { for (const t of room.readyPhase.timers.values()) clearTimeout(t); }
   for (const t of room.waiterLeaveTimers.values()) clearTimeout(t);
+  for (const t of room.spectatorLeaveTimers.values()) clearTimeout(t);
   rooms.delete(room.id);
   broadcastRoomList();
   return true;
@@ -192,7 +234,7 @@ async function broadcastRoomWaiting(room) {
 // 게임 시작 전, 누구 하나라도 명시적으로 나가면 방 자체를 없앤다 (남은 사람도 로비로 돌아감)
 function closeRoom(room, reason) {
   if (room.readyPhase) { for (const t of room.readyPhase.timers.values()) clearTimeout(t); }
-  for (const uc of [...room.members, ...room.waiters]) {
+  for (const uc of [...room.members, ...room.waiters, ...room.spectators]) {
     const sid = getSocketId(uc);
     const s = sid && sessions.get(sid);
     if (s) s.roomId = null;
@@ -209,6 +251,12 @@ function removeMemberFromRoom(room, userCode) {
   if (!stillHasHumans) {
     if (room.readyPhase) { for (const t of room.readyPhase.timers.values()) clearTimeout(t); }
     for (const uc of room.waiters) {
+      const sid = getSocketId(uc);
+      const s = sid && sessions.get(sid);
+      if (s) s.roomId = null;
+      emitToPlayer(uc, 'roomClosed', { reason: '방이 사라졌어요' });
+    }
+    for (const uc of room.spectators) {
       const sid = getSocketId(uc);
       const s = sid && sessions.get(sid);
       if (s) s.roomId = null;
@@ -324,7 +372,7 @@ function dropWaiterOnTimeout(room, userCode) {
     room.readyPhase.timers.delete(userCode);
   }
   emitToPlayer(userCode, 'playAgainError', '준비 시간이 지나 대기가 취소됐습니다.');
-  broadcastWaiterList(room);
+  broadcastWaitSpectateStatus(room);
   broadcastRoomList();
   if (checkAndCloseIfAlone(room)) return;
   broadcastReadyStatus(room);
@@ -702,6 +750,10 @@ function broadcastLog(game, message) {
   for (const p of game.players) {
     if (!p.isAI) emitToPlayer(p.userCode, 'gameLog', message);
   }
+  const room = rooms.get(game.roomId);
+  if (room) {
+    for (const uc of room.spectators) emitToPlayer(uc, 'gameLog', message);
+  }
 }
 
 function broadcastThankYouAnnounce(game, playerCode, playerName, card) {
@@ -784,6 +836,7 @@ async function endGame(game, winnerCode) {
   const waiterRoom = rooms.get(game.roomId);
   if (waiterRoom) {
     for (const uc of waiterRoom.waiters) emitToPlayer(uc, 'gameEnd', gameEndPayload);
+    for (const uc of waiterRoom.spectators) emitToPlayer(uc, 'gameEnd', gameEndPayload);
   }
 
   if (game.mode === 'single') {
@@ -866,13 +919,24 @@ io.on('connection', (socket) => {
           cancelWaiterLeave(myRoom, user.userCode);
           socket.emit('gameState', getPublicState(myRoom.game, user.userCode));
           socket.emit('spectateOk', { roomId: myRoom.id });
-          broadcastWaiterList(myRoom); // 재접속한 이 소켓에도 현재 대기자 명단을 다시 보내줌
+          broadcastWaitSpectateStatus(myRoom); // 재접속한 이 소켓에도 현재 대기자/관전자 현황을 다시 보내줌
+          return;
+        }
+        if (myRoom.spectators.has(user.userCode)) {
+          cancelSpectatorLeave(myRoom, user.userCode);
+          socket.emit('gameState', getPublicState(myRoom.game, user.userCode, true));
+          socket.emit('spectateOk', { roomId: myRoom.id });
+          broadcastWaitSpectateStatus(myRoom);
           return;
         }
       } else if (myRoom.waiters.has(user.userCode)) {
         // "한 판 더" 준비 단계 중 대기자가 재접속한 경우 — 유예 취소만 하고 그대로 둠
         // (게임 화면에서 결과창을 계속 보고 있는 상태이므로 별도 화면 전환 불필요)
         cancelWaiterLeave(myRoom, user.userCode);
+      } else if (myRoom.spectators.has(user.userCode)) {
+        // 관전자는 게임이 없는 동안(로비/준비단계) 볼 게 없으므로 "게임을 기다리는 중" 화면을 보여준다
+        cancelSpectatorLeave(myRoom, user.userCode);
+        socket.emit('spectateWaitingRoom', { roomId: myRoom.id, title: myRoom.title });
       } else if (!myRoom.lastGamePlayers) {
         broadcastRoomWaiting(myRoom);
         return;
@@ -1180,6 +1244,8 @@ io.on('connection', (socket) => {
       readyMembers: new Set(), // 방장 제외, 준비 완료한 멤버
       waiters: new Set(), // 게임 진행 중 들어와 관전하며 다음 판을 기다리는 인원
       waiterLeaveTimers: new Map(), // userCode → 연결 끊김 후 대기자를 실제로 내보내기까지의 유예 타이머
+      spectators: new Set(), // 순수 관전자(정원 2명, 항상 입장 가능, 모든 패 공개)
+      spectatorLeaveTimers: new Map(), // userCode → 연결 끊김 후 관전자를 실제로 내보내기까지의 유예 타이머
       game: null, lastGamePlayers: null, lastGameWinnerCode: null, readyPhase: null,
       createdBy: sess.userCode,
     };
@@ -1218,7 +1284,7 @@ io.on('connection', (socket) => {
       room.waiters.add(sess.userCode);
       sess.roomId = room.id;
       socket.emit('gameState', getPublicState(room.game, sess.userCode));
-      broadcastWaiterList(room);
+      broadcastWaitSpectateStatus(room);
       broadcastRoomList();
       socket.emit('spectateOk', { roomId: room.id });
       return;
@@ -1230,6 +1296,27 @@ io.on('connection', (socket) => {
     await broadcastRoomWaiting(room);
     broadcastRoomList();
     socket.emit('joinMultiOk', { roomId: room.id });
+  });
+
+  // 순수 관전 모드로 방 입장: 대기(waiters)와 완전히 별개. 정원 2명, 로비/준비단계/진행중 언제든 입장 가능,
+  // 모든 플레이어 패가 공개된다. 코드가 있는 방은 코드 검증 필요. 실제 화면 데이터는 이후 페이지 이동으로
+  // game.html이 다시 'login'하는 시점에 room 상태를 보고 결정한다(login 핸들러 참고).
+  socket.on('spectateRoomByList', async ({ roomId, code } = {}) => {
+    const sess = sessions.get(socket.id);
+    if (!sess) return;
+    if (!isAvailableForRoom(sess.userCode)) { socket.emit('joinMultiError', '이미 다른 방에 참여 중이에요'); return; }
+    const room = rooms.get(roomId);
+    if (!room) { socket.emit('joinMultiError', '존재하지 않는 방이에요'); return; }
+    if (room.code && room.code !== (code || '').trim()) {
+      socket.emit('joinRoomNeedsCode', { roomId: room.id, title: room.title, spectate: true }); return;
+    }
+    if (room.spectators.size >= SPECTATOR_CAP) { socket.emit('joinMultiError', '관전 정원이 찼습니다'); return; }
+
+    room.spectators.add(sess.userCode);
+    sess.roomId = room.id;
+    broadcastWaitSpectateStatus(room);
+    broadcastRoomList();
+    socket.emit('spectateOk', { roomId: room.id });
   });
 
   // 방 대기실에서 다른 사람 초대 (누구나 가능)
@@ -1252,10 +1339,18 @@ io.on('connection', (socket) => {
     const room = rooms.get(sess.roomId);
     sess.roomId = null;
     if (!room) return;
+    // 순수 관전자가 나가기 — 게임/방 자체엔 영향 없음
+    if (room.spectators.has(sess.userCode)) {
+      cancelSpectatorLeave(room, sess.userCode);
+      room.spectators.delete(sess.userCode);
+      broadcastWaitSpectateStatus(room);
+      broadcastRoomList();
+      return;
+    }
     // 관전(대기) 중이던 사람이 나가기 — 게임/방 자체엔 영향 없음
     if (room.waiters.has(sess.userCode)) {
       room.waiters.delete(sess.userCode);
-      broadcastWaiterList(room);
+      broadcastWaitSpectateStatus(room);
       broadcastRoomList();
       return;
     }
@@ -1346,6 +1441,9 @@ io.on('connection', (socket) => {
     for (const p of room.game.players) {
       if (p.isAI) continue;
       emitToPlayer(p.userCode, 'gameState', getPublicState(room.game, p.userCode));
+    }
+    for (const uc of room.spectators) {
+      emitToPlayer(uc, 'gameState', getPublicState(room.game, uc, true));
     }
 
     const cur = getCurrentPlayer(room.game);
@@ -1620,6 +1718,9 @@ io.on('connection', (socket) => {
     for (const p of room.game.players) {
       if (!p.isAI) emitToPlayer(p.userCode, 'gameState', getPublicState(room.game, p.userCode));
     }
+    for (const uc of room.spectators) {
+      emitToPlayer(uc, 'gameState', getPublicState(room.game, uc, true));
+    }
 
     const cur = getCurrentPlayer(room.game);
     startInitialTurn(room.game, cur, 2000 + Math.random() * 1000);
@@ -1770,7 +1871,8 @@ io.on('connection', (socket) => {
     const userMap = new Map(allUsers.map(u => [u.userCode, u]));
 
     const liveStats = eventUtils.aggregateUsersInRange(singleRows, multiRows, week.currentStartSec, week.currentEndSec);
-    const liveWinners = eventUtils.computeAllCategoryWinners(liveStats);
+    // "현황" 탭은 1~3위(tier)까지 보여준다 — 1위만 실제 보상 대상, 2·3위는 참고용 후보
+    const liveTiers = eventUtils.computeAllCategoryTiers(liveStats, 3);
 
     const toPublicWinner = w => ({
       value: w.value,
@@ -1780,6 +1882,7 @@ io.on('connection', (socket) => {
         avatar: userMap.get(uc)?.avatar || 'person',
       })),
     });
+    const toPublicTiers = tiers => tiers.map(toPublicWinner);
 
     const live = {};
     const results = {};
@@ -1792,7 +1895,7 @@ io.on('connection', (socket) => {
 
     for (const key of Object.keys(eventUtils.EVENT_CATEGORIES)) {
       const cfg = eventUtils.EVENT_CATEGORIES[key];
-      live[key] = { ...toPublicWinner(liveWinners[key]), minGames: cfg.minGames };
+      live[key] = { tiers: toPublicTiers(liveTiers[key]), minGames: cfg.minGames };
       const r = lastWinners ? lastWinners[key] : { winners: [], value: 0 };
       results[key] = {
         ...toPublicWinner(r),
@@ -1849,13 +1952,19 @@ io.on('connection', (socket) => {
     sessions.delete(socket.id);
     if (sess) {
       const room = rooms.get(sess.roomId);
-      if (room && !room.game && !room.lastGamePlayers) {
-        // 게임을 아직 한 번도 시작 안 한, 순수 대기 중인 방에서 연결이 끊기면 바로 방에서 빠짐
-        removeMemberFromRoom(room, sess.userCode);
+      // 관전자/대기자 여부를 방 상태(game 유무)보다 먼저 확인해야 한다 — 그렇지 않으면
+      // 순수 로비 상태(game도 lastGamePlayers도 없음)에서 관전자가 끊겼을 때 removeMemberFromRoom이
+      // "멤버"로 착각하고 잘못 처리해버린다.
+      if (room && room.spectators.has(sess.userCode)) {
+        // 순수 관전자는 플레이어/대기자와 달리 방 상태에 아무 영향이 없으므로 유예만 두고 자리 반납
+        scheduleSpectatorLeave(room, sess.userCode);
       } else if (room && room.waiters.has(sess.userCode)) {
         // 관전(대기) 중이던 사람은 플레이어와 달리 일시정지 없이 자리를 반납하지만,
         // index.html → game.html 이동 자체가 순간적인 재연결을 유발하므로 짧은 유예를 둔다
         scheduleWaiterLeave(room, sess.userCode);
+      } else if (room && !room.game && !room.lastGamePlayers) {
+        // 게임을 아직 한 번도 시작 안 한, 순수 대기 중인 방에서 연결이 끊기면 바로 방에서 빠짐
+        removeMemberFromRoom(room, sess.userCode);
       } else if (room && !room.game && room.lastGamePlayers) {
         // "한 판 더" 준비 단계 중 연결이 끊긴 경우: 남은 인원이 1명 이하로 줄면 그 사람도 메인으로 돌려보냄
         checkAndCloseIfAlone(room);

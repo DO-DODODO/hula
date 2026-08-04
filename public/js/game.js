@@ -142,6 +142,8 @@ if (gameMode === 'single') {
 // ── Game State ─────────────────────────────────────────────────────────
 socket.on('gameState', (state) => {
   requestWakeLock();
+  const waitOverlay = document.getElementById('spectator-wait-overlay');
+  if (waitOverlay) waitOverlay.style.display = 'none';
   if (gameMode === 'multi') {
     document.getElementById('admin-controls').style.display = (state.hostCode === userCode) ? '' : 'none';
   }
@@ -230,16 +232,32 @@ socket.on('roomClosed', ({ reason }) => {
   setTimeout(() => { socket.disconnect(); location.href = '/'; }, 2000);
 });
 
-// 대기(관전) 뱃지: 플레이어/대기자 모두에게 노출 — "OOO, OOO님 대기중"
-socket.on('waiterList', ({ names } = {}) => {
+// 대기자/관전자 인원수 뱃지: 플레이어/대기자/관전자 모두에게 노출 — "대기 N" / "관전 N" (0명이면 그 줄 숨김)
+socket.on('waitSpectateStatus', ({ waiterCount, spectatorCount } = {}) => {
   const badge = document.getElementById('waiter-badge');
   if (!badge) return;
-  if (!names || names.length === 0) { badge.style.display = 'none'; return; }
+  const lines = [];
+  if (waiterCount > 0) lines.push(`대기 ${waiterCount}`);
+  if (spectatorCount > 0) lines.push(`관전 ${spectatorCount}`);
+  if (!lines.length) { badge.style.display = 'none'; return; }
   badge.style.display = '';
-  document.getElementById('waiter-badge-text').innerHTML = `<b>${names.join(', ')}</b>님 대기중`;
+  document.getElementById('waiter-badge-text').innerHTML = lines.join('<br>');
+});
+
+// 순수 관전자가 게임이 아직 없는 방(로비/준비단계)에 들어온 경우 — 게임 시작을 기다리는 화면
+socket.on('spectateWaitingRoom', ({ title } = {}) => {
+  const overlay = document.getElementById('spectator-wait-overlay');
+  if (!overlay) return;
+  document.getElementById('spectator-wait-title').textContent = title || '';
+  overlay.style.display = 'flex';
 });
 
 document.getElementById('btn-spectator-leave')?.addEventListener('click', () => {
+  socket.emit('leaveRoom');
+  socket.disconnect();
+  location.href = '/';
+});
+document.getElementById('btn-spectator-wait-leave')?.addEventListener('click', () => {
   socket.emit('leaveRoom');
   socket.disconnect();
   location.href = '/';
@@ -310,6 +328,10 @@ function render() {
   const specPanel = document.getElementById('spectator-panel');
   if (specPanel) specPanel.style.display = spectating ? '' : 'none';
   if (spectating) {
+    // 순수 관전 모드(모든 패 공개)인지, 기존 대기모드(카드 뒷면만)인지는 hand 데이터 유무로 구분
+    const fullReveal = gameState.players.some(p => p.hand);
+    const msgEl = document.getElementById('spectator-msg');
+    if (msgEl) msgEl.textContent = fullReveal ? '🎬 관전 중이에요 (모든 패가 보여요)' : '🎬 게임을 구경하고 있어요';
     renderSpectatorSeat(gameState.players.find(p => p.seatIndex === 0));
   } else {
     renderMyArea(me);
@@ -318,7 +340,15 @@ function render() {
   renderCenter();
 }
 
-// 관전 중일 때 "내 자리"(seat 0)에 앉은 실제 플레이어를 다른 상대와 같은 방식(카드 뒷면)으로 보여준다
+// 순수 관전자에게는 실제 카드(hand)가 오므로 앞면으로, 기존 대기모드에겐 null이라 뒷면으로 보여준다
+function opponentTinyCardEl(card) {
+  const el = document.createElement('div');
+  el.className = 'card tiny opp-face ' + getCardColorClass(card);
+  el.appendChild(cardInnerEl(card));
+  return el;
+}
+
+// 관전 중일 때 "내 자리"(seat 0)에 앉은 실제 플레이어를 다른 상대와 같은 방식으로 보여준다
 function renderSpectatorSeat(player) {
   const nameEl = document.getElementById('spectator-seat0-name');
   const cardsEl = document.getElementById('spectator-seat0-cards');
@@ -326,6 +356,10 @@ function renderSpectatorSeat(player) {
   const avatarEmoji = AVATAR_MAP[player.avatar] || (player.isAI ? '🤖' : '👤');
   nameEl.innerHTML = rankBadgeHtml(player) + avatarEmoji + ' ' + nameGold(player);
   cardsEl.innerHTML = '';
+  if (player.hand) {
+    for (const card of player.hand) cardsEl.appendChild(opponentTinyCardEl(card));
+    return;
+  }
   for (let i = 0; i < (player.handCount || 0); i++) {
     const c = document.createElement('div');
     c.className = 'card card-back';
@@ -382,10 +416,14 @@ function renderPlayer(pos, player, comboGrew = false, growComboEl = null) {
 
   const cardsEl = el.querySelector('.player-cards');
   cardsEl.innerHTML = '';
-  for (let i = 0; i < player.handCount; i++) {
-    const c = document.createElement('div');
-    c.className = 'card card-back tiny';
-    cardsEl.appendChild(c);
+  if (player.hand) {
+    for (const card of player.hand) cardsEl.appendChild(opponentTinyCardEl(card));
+  } else {
+    for (let i = 0; i < player.handCount; i++) {
+      const c = document.createElement('div');
+      c.className = 'card card-back tiny';
+      cardsEl.appendChild(c);
+    }
   }
 }
 

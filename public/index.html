@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라</title>
-  <link rel="stylesheet" href="css/style.css?v=23">
+  <link rel="stylesheet" href="css/style.css?v=25">
 </head>
 <body>
   <div id="network-banner">🔌 연결이 끊겼습니다. 재연결 중...</div>
@@ -282,15 +282,22 @@
         <span class="event-live-tag"><span class="event-live-dot"></span>진행중</span>
       </div>
       <div class="event-content">
-        <div class="ms-group-label">이번 주 보상 안내</div>
-        <div class="guide-list">
-          <div class="guide-row"><span class="guide-ic">🏆</span><span class="guide-nm">최다승 · 싱글</span><span class="guide-rw">1000점</span></div>
-          <div class="guide-row"><span class="guide-ic">🏆</span><span class="guide-nm">최다승 · 멀티</span><span class="guide-rw">5만원</span></div>
-          <div class="guide-row"><span class="guide-ic">🎯</span><span class="guide-nm">최다판 · 싱글</span><span class="guide-rw">500점</span></div>
-          <div class="guide-row"><span class="guide-ic">🎯</span><span class="guide-nm">최다판 · 멀티</span><span class="guide-rw">25000원</span></div>
-          <div class="guide-row"><span class="guide-ic">✨</span><span class="guide-nm">최다훌라 · 합산</span><span class="guide-rw">1000점+5만원</span></div>
+        <div class="guide-panel collapsed" id="event-guide-panel">
+          <button class="guide-toggle" id="event-guide-toggle">
+            <span class="ms-group-label" style="padding:0">이번 주 보상 안내</span>
+            <span class="chev">⌄</span>
+          </button>
+          <div class="guide-body">
+            <div class="guide-list">
+              <div class="guide-row"><span class="guide-ic">🏆</span><span class="guide-nm">최다승 · 싱글</span><span class="guide-rw">1000점</span></div>
+              <div class="guide-row"><span class="guide-ic">🏆</span><span class="guide-nm">최다승 · 멀티</span><span class="guide-rw">5만원</span></div>
+              <div class="guide-row"><span class="guide-ic">🎯</span><span class="guide-nm">최다판 · 싱글</span><span class="guide-rw">500점</span></div>
+              <div class="guide-row"><span class="guide-ic">🎯</span><span class="guide-nm">최다판 · 멀티</span><span class="guide-rw">25000원</span></div>
+              <div class="guide-row"><span class="guide-ic">✨</span><span class="guide-nm">최다훌라 · 합산</span><span class="guide-rw">1000점+5만원</span></div>
+            </div>
+            <div class="guide-cond">각 부문 싱글/멀티 3판 이상, 최다훌라는 합산 3판 이상부터 인정</div>
+          </div>
         </div>
-        <div class="guide-cond">각 부문 싱글/멀티 3판 이상, 최다훌라는 합산 3판 이상부터 인정</div>
         <div id="event-notice" class="guide-notice"></div>
         <div id="event-msg" class="error-msg"></div>
 
@@ -301,7 +308,8 @@
 
         <div id="event-panel-live">
           <div class="ms-group-label">이번 주 현황 (진행중, 실시간)</div>
-          <div id="event-live-grid" class="live-grid"></div>
+          <div class="rank-caption">🥇에게만 보상이 지급돼요 · 2·3위는 <b>참고용 후보</b>예요</div>
+          <div id="event-live-grid" class="rank-list"></div>
         </div>
 
         <div id="event-panel-result" class="active">
@@ -379,7 +387,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/main.js?v=18"></script>
+  <script src="js/main.js?v=20"></script>
   <script src="js/presence.js?v=2"></script>
 </body>
 </html>

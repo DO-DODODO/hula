@@ -49,7 +49,7 @@ function getCurrentPlayer(game) {
   return game.players[game.turnIndex];
 }
 
-function getPublicState(game, viewerCode = null) {
+function getPublicState(game, viewerCode = null, revealAll = false) {
   return {
     id: game.id,
     mode: game.mode,
@@ -61,7 +61,7 @@ function getPublicState(game, viewerCode = null) {
       isAI: p.isAI,
       seatIndex: p.seatIndex,
       handCount: p.hand.length,
-      hand: p.userCode === viewerCode ? p.hand : null,
+      hand: (revealAll || p.userCode === viewerCode) ? p.hand : null,
       registered: p.registered,
       avatar: p.avatar,
       singlePoints: p.userCode === viewerCode ? p.singlePoints : undefined,

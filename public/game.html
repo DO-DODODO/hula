@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>훌라 - 게임</title>
-  <link rel="stylesheet" href="css/style.css?v=23">
+  <link rel="stylesheet" href="css/style.css?v=25">
 </head>
 <body class="game-body">
 
@@ -101,7 +101,7 @@
       </div>
     </div>
 
-    <!-- 관전(대기) 패널 - 진행중인 방에 대기자로 들어왔을 때만 my-area 자리를 대체 -->
+    <!-- 관전(대기) 패널 - 진행중인 방에 대기자/관전자로 들어왔을 때만 my-area 자리를 대체 -->
     <div id="spectator-panel" style="display:none">
       <div id="spectator-seat0">
         <span id="spectator-seat0-name"></span>
@@ -168,6 +168,13 @@
     </div>
   </div>
 
+  <!-- 관전 대기 오버레이 - 아직 게임이 시작 안 된 방(로비/준비단계)을 관전할 때 전체 화면을 덮음 -->
+  <div id="spectator-wait-overlay" style="display:none">
+    <div id="spectator-wait-title"></div>
+    <div class="spectator-wait-msg">🎬 게임이 시작되면 자동으로 보여드릴게요</div>
+    <button id="btn-spectator-wait-leave" class="btn-secondary">나가기</button>
+  </div>
+
   <!-- Floating notifications -->
   <div id="notifications"></div>
 
@@ -224,7 +231,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/game.js?v=27"></script>
+  <script src="js/game.js?v=28"></script>
   <script src="js/presence.js?v=2"></script>
 </body>
 </html>

@@ -107,8 +107,36 @@ function computeAllCategoryWinners(stats) {
   return out;
 }
 
+// "현황" 탭 전용: 한 부문의 이번 주 상위 서로 다른 값(tier) topN개를 계산.
+// 1위(tiers[0])만 실제 보상 대상(computeCategoryWinner와 동일 기준)이고, 2·3위는 보상 없는 참고용 후보다.
+// 같은 값으로 묶인 사람은 한 tier 안에 winners로 함께 들어간다(공동 순위).
+function computeCategoryTiers(stats, categoryKey, topN = 3) {
+  const cfg = EVENT_CATEGORIES[categoryKey];
+  const byValue = new Map(); // value → [userCode, ...]
+  for (const [userCode, s] of stats) {
+    const { games, value } = valueFor(cfg, s);
+    if (games < cfg.minGames) continue;
+    if (value <= 0) continue;
+    if (!byValue.has(value)) byValue.set(value, []);
+    byValue.get(value).push(userCode);
+  }
+  return [...byValue.keys()]
+    .sort((a, b) => b - a)
+    .slice(0, topN)
+    .map(value => ({ value, winners: byValue.get(value) }));
+}
+
+function computeAllCategoryTiers(stats, topN = 3) {
+  const out = {};
+  for (const key of Object.keys(EVENT_CATEGORIES)) {
+    out[key] = computeCategoryTiers(stats, key, topN);
+  }
+  return out;
+}
+
 module.exports = {
   EVENT_ANCHOR_DOW, EVENT_CATEGORIES, EVENT_LAUNCH_WEEK_KEY,
   getWeekStartSec, getCurrentAndLastWeek,
   aggregateUsersInRange, computeCategoryWinner, computeAllCategoryWinners,
+  computeCategoryTiers, computeAllCategoryTiers,
 };

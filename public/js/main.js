@@ -157,11 +157,13 @@ function renderRoomList(rooms) {
     const statusText = r.playing
       ? (r.waitingCap > 0 ? `게임 중 · 대기 ${r.waitingCount}/${r.waitingCap}` : '게임 중 · 정원 마감')
       : `${r.memberCount}/4`;
+    const specFull = r.spectatorCount >= r.spectatorCap;
     return `
     <div class="room-row${isFull ? ' full' : ''}" data-roomid="${r.id}">
       <span class="lock">${r.locked ? '🔒' : ''}</span>
       <span class="rname">${r.title}</span>
       <span class="rcount">${statusText}</span>
+      <button class="btn-spectate-room" data-roomid="${r.id}"${specFull ? ' disabled' : ''}>👁 관전 ${r.spectatorCount}/${r.spectatorCap}</button>
     </div>
   `;
   }).join('');
@@ -171,11 +173,20 @@ function renderRoomList(rooms) {
       socket.emit('joinRoomByList', { roomId: row.dataset.roomid });
     };
   });
+  el.querySelectorAll('.btn-spectate-room').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      socket.emit('spectateRoomByList', { roomId: btn.dataset.roomid });
+    };
+  });
 }
 
 let pendingJoinRoomId = null;
-socket.on('joinRoomNeedsCode', ({ roomId, title }) => {
+let pendingJoinIsSpectate = false;
+socket.on('joinRoomNeedsCode', ({ roomId, title, spectate }) => {
   pendingJoinRoomId = roomId;
+  pendingJoinIsSpectate = !!spectate;
   document.getElementById('room-code-title').textContent = `"${title}" 코드 입력`;
   document.getElementById('input-join-room-code').value = '';
   document.getElementById('room-code-error').textContent = '';
@@ -183,7 +194,8 @@ socket.on('joinRoomNeedsCode', ({ roomId, title }) => {
 });
 document.getElementById('btn-submit-room-code').onclick = () => {
   const code = document.getElementById('input-join-room-code').value.trim();
-  socket.emit('joinRoomByList', { roomId: pendingJoinRoomId, code });
+  const event = pendingJoinIsSpectate ? 'spectateRoomByList' : 'joinRoomByList';
+  socket.emit(event, { roomId: pendingJoinRoomId, code });
 };
 document.getElementById('btn-cancel-room-code').onclick = () => {
   document.getElementById('modal-room-code').style.display = 'none';
@@ -963,7 +975,13 @@ const EVENT_CATEGORY_META = {
   gamesMulti: { label: '최다판 · 멀티', unit: '판', icon: '🎁' },
   hula: { label: '최다훌라 · 합산', unit: '회', icon: '✨' },
 };
+// 현황 탭 카드 헤더 아이콘 - 보상 안내 목록(guide-list)과 동일한 아이콘으로 맞춤(claim 팝업의 icon과는 별개)
+const EVENT_RANK_ICON = { winsSingle: '🏆', winsMulti: '🏆', gamesSingle: '🎯', gamesMulti: '🎯', hula: '✨' };
 let eventData = null;
+
+document.getElementById('event-guide-toggle').onclick = () => {
+  document.getElementById('event-guide-panel').classList.toggle('collapsed');
+};
 
 // 이번 주 내가 수상했는데 아직 안 받은 게 하나라도 있으면 메인화면 이벤트 아이콘에 뱃지 표시
 function updateEventBadge(data) {
@@ -1012,18 +1030,28 @@ socket.on('eventStatus', (data) => {
   renderEventResults(data);
 });
 
+// 부문마다 1~3위(tier)까지 표시. 1위(tiers[0])는 실제 보상 수령자라 골드로 강조하고,
+// 2·3위는 보상이 없는 참고용 후보라 "후보" 뱃지만 붙이고 무채색으로 낮춘다(순위 표시는 안 함).
 function renderEventLive(data) {
   const grid = document.getElementById('event-live-grid');
   grid.innerHTML = EVENT_CATEGORY_ORDER.map(key => {
     const meta = EVENT_CATEGORY_META[key];
+    const icon = EVENT_RANK_ICON[key];
     const c = data.live[key];
-    if (c.winners.length === 0) {
-      return `<div class="live-card empty"><div class="lc-lb">${meta.label}</div><div class="lc-body">아직 없음</div></div>`;
+    const tiers = c.tiers || [];
+    const head = `<div class="rc-head"><span class="rc-ic">${icon}</span><span class="rc-lb">${meta.label}</span></div>`;
+    if (tiers.length === 0) {
+      return `<div class="rank-card">${head}<div class="rank-empty">아직 없음</div></div>`;
     }
-    const w = c.winners[0];
-    const tie = c.winners.length > 1 ? ` 외 ${c.winners.length - 1}명` : '';
-    const wide = key === 'hula' ? ' style="grid-column:1 / span 2"' : '';
-    return `<div class="live-card"${wide}><div class="lc-lb">${meta.label}</div><div class="lc-body"><span class="lc-av">${msAvatarEmoji(w.avatar)}</span><span class="lc-nm">${w.userName}${tie}</span><span class="lc-val">${c.value}${meta.unit}</span></div></div>`;
+    const rows = tiers.map((tier, idx) => {
+      const isWinner = idx === 0;
+      const tieTag = tier.winners.length > 1 ? `<span class="rk-tie">공동 ${tier.winners.length}명</span>` : '';
+      return tier.winners.map(w => {
+        const posEl = isWinner ? '' : '<span class="rk-pos">후보</span>';
+        return `<div class="rank-row${isWinner ? ' winner' : ' cand'}">${posEl}<span class="rk-av">${msAvatarEmoji(w.avatar)}</span><span class="rk-nm">${w.userName}</span>${tieTag}<span class="rk-val">${tier.value}${meta.unit}</span></div>`;
+      }).join('');
+    }).join('');
+    return `<div class="rank-card">${head}${rows}</div>`;
   }).join('');
 }
 
