@@ -252,13 +252,16 @@ socket.on('spectateWaitingRoom', ({ title } = {}) => {
   overlay.style.display = 'flex';
 });
 
+// 관전(대기) 나가기 - index.html이 로그인 직후 멀티 로비로 바로 진입하도록 플래그를 남겨둔다
 document.getElementById('btn-spectator-leave')?.addEventListener('click', () => {
   socket.emit('leaveRoom');
+  sessionStorage.setItem('autoOpenMultiLobby', '1');
   socket.disconnect();
   location.href = '/';
 });
 document.getElementById('btn-spectator-wait-leave')?.addEventListener('click', () => {
   socket.emit('leaveRoom');
+  sessionStorage.setItem('autoOpenMultiLobby', '1');
   socket.disconnect();
   location.href = '/';
 });
@@ -340,10 +343,11 @@ function render() {
   renderCenter();
 }
 
-// 순수 관전자에게는 실제 카드(hand)가 오므로 앞면으로, 기존 대기모드에겐 null이라 뒷면으로 보여준다
-function opponentTinyCardEl(card) {
+// 순수 관전자에게는 실제 카드(hand)가 오므로 앞면으로, 기존 대기모드에겐 null이라 뒷면으로 보여준다.
+// 크기는 tiny가 아니라 내 손패(#my-hand)와 동일한 기본 카드 크기로 - 관전자가 편하게 읽을 수 있게.
+function opponentFaceCardEl(card) {
   const el = document.createElement('div');
-  el.className = 'card tiny opp-face ' + getCardColorClass(card);
+  el.className = 'card opp-face ' + getCardColorClass(card);
   el.appendChild(cardInnerEl(card));
   return el;
 }
@@ -357,7 +361,7 @@ function renderSpectatorSeat(player) {
   nameEl.innerHTML = rankBadgeHtml(player) + avatarEmoji + ' ' + nameGold(player);
   cardsEl.innerHTML = '';
   if (player.hand) {
-    for (const card of player.hand) cardsEl.appendChild(opponentTinyCardEl(card));
+    for (const card of player.hand) cardsEl.appendChild(opponentFaceCardEl(card));
     return;
   }
   for (let i = 0; i < (player.handCount || 0); i++) {
@@ -417,7 +421,7 @@ function renderPlayer(pos, player, comboGrew = false, growComboEl = null) {
   const cardsEl = el.querySelector('.player-cards');
   cardsEl.innerHTML = '';
   if (player.hand) {
-    for (const card of player.hand) cardsEl.appendChild(opponentTinyCardEl(card));
+    for (const card of player.hand) cardsEl.appendChild(opponentFaceCardEl(card));
   } else {
     for (let i = 0; i < player.handCount; i++) {
       const c = document.createElement('div');

@@ -672,16 +672,17 @@ body.skin-dolphin .card.card-back { background-image: url('../img/card-dolphin.p
 .player-cards .card { margin-left: -12px; }
 .player-cards .card:first-child { margin-left: 0; }
 
-/* 순수 관전자에게 공개되는 상대 앞면 카드 - 겹쳐도 좌상단 숫자/모양은 보이게 (콤보 카드와 동일 기법) */
+/* 순수 관전자에게 공개되는 상대 앞면 카드 - 겹쳐도 좌상단 숫자/모양은 보이게(콤보 카드와 동일 기법),
+   크기는 tiny가 아니라 기본 .card 크기 그대로 두고, 안의 숫자/모양 폰트도 내 손패(#my-hand)와 동일하게 맞춤 */
 .card.opp-face { position: relative; overflow: hidden; }
 .card.opp-face .card-inner {
   position: absolute;
-  top: 3px; left: 4px;
+  top: 4px; left: 5px;
   align-items: flex-start;
   line-height: 1.1;
 }
-.card.opp-face .card-inner span:first-child { font-size: clamp(12px, 1.4vw, 18px); }
-.card.opp-face .card-suit { font-size: clamp(13px, 1.5vw, 20px); }
+.card.opp-face .card-inner span:first-child { font-size: clamp(14px, 1.8vw, 22px); }
+.card.opp-face .card-suit { font-size: clamp(15px, 1.9vw, 24px); }
 
 /* ── Combos ──────────────────────────────────────────────────────────── */
 .combo-group { display: flex; align-items: center; background: rgba(0,0,0,0.3); border-radius: 6px; padding: 3px 4px; cursor: pointer; border: 1px solid transparent; }

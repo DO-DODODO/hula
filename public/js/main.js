@@ -48,11 +48,17 @@ socket.on('loginSuccess', (user) => {
   setCookie('userName', user.userName);
   setCookie('isAdmin', user.isAdmin ? '1' : '0');
   updateMainScreen();
-  showScreen('screen-main');
   socket.emit('getEventStatus'); // 메인화면 이벤트 아이콘 뱃지 표시 여부를 미리 알아야 해서 로그인 직후 조회
   if (sessionStorage.getItem('autoJoinRoom') === '1') {
     sessionStorage.removeItem('autoJoinRoom');
+    showScreen('screen-main');
     socket.emit('joinRoomViaInvite');
+  } else if (sessionStorage.getItem('autoOpenMultiLobby') === '1') {
+    // 관전(대기) 모드에서 나가면 메인이 아니라 멀티 로비로 바로 진입
+    sessionStorage.removeItem('autoOpenMultiLobby');
+    socket.emit('joinMulti');
+  } else {
+    showScreen('screen-main');
   }
 });
 socket.on('loginError', (msg) => {
