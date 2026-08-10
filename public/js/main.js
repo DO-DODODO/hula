@@ -100,13 +100,16 @@ function updateMainScreen() {
   updateSkinBanner();
 }
 
-// 카드 뒷면 스킨 배너 — 배포일로부터 3일간만 노출(고정 배포일 기준, 이벤트 기능과 동일 패턴)
-const CARD_SKIN_BANNER_LAUNCH = new Date('2026-07-23T00:00:00+09:00').getTime();
+// 카드 뒷면 스킨 배너 — 오늘(2026-08-10) 자정까지 "전체 카드 체험" 안내로 노출
+// (game/cardSkins.js의 TRIAL_ALL_SKINS_END와 동일한 시각, 클라이언트는 표시용으로 중복 정의)
+const CARD_SKIN_TRIAL_END = new Date('2026-08-11T00:00:00+09:00').getTime();
+function isSkinTrialActive() {
+  return Date.now() < CARD_SKIN_TRIAL_END;
+}
 function updateSkinBanner() {
   const banner = document.getElementById('skin-banner');
   if (!banner) return;
-  const withinWindow = Date.now() - CARD_SKIN_BANNER_LAUNCH < 3 * 86400 * 1000;
-  banner.style.display = withinWindow ? '' : 'none';
+  banner.style.display = isSkinTrialActive() ? '' : 'none';
 }
 document.getElementById('skin-banner')?.addEventListener('click', () => {
   document.getElementById('btn-settings').click();
@@ -401,14 +404,16 @@ const CARD_SKINS = {
   sea: { free: false, singleReq: 10000, multiReq: 1100000, label: '바다' },
   watermelon: { free: false, singleReq: 50000, multiReq: 1300000, label: '수박' },
   dolphin: { free: false, singleReq: 100000, multiReq: 1500000, label: '돌고래' },
+  peach: { free: false, singleReq: 150000, multiReq: 2000000, label: '복숭아' },
 };
-const SKIN_ORDER = ['basic', 'wine', 'sea', 'watermelon', 'dolphin'];
+const SKIN_ORDER = ['basic', 'wine', 'sea', 'watermelon', 'dolphin', 'peach'];
 const SKIN_THUMB_STYLE = {
   basic: 'background: linear-gradient(135deg, #1a3a6b 0%, #2d5fa6 100%);',
   wine: 'background: linear-gradient(135deg, #6b1a35 0%, #a62d5f 100%);',
   sea: "background-image:url('img/card-sea.png');background-size:cover;background-position:center;",
   watermelon: "background-image:url('img/card-watermelon.png');background-size:cover;background-position:center;",
   dolphin: "background-image:url('img/card-dolphin.png');background-size:cover;background-position:center;",
+  peach: "background-image:url('img/card-peach.png');background-size:cover;background-position:center;",
 };
 
 function renderSkinGrid() {
@@ -417,19 +422,29 @@ function renderSkinGrid() {
   const peakSingle = me.peakSinglePoints ?? me.singlePoints ?? 0;
   const peakMulti = me.peakMultiBalance ?? me.multiBalance ?? 0;
   const selected = me.selectedCardSkin || 'basic';
+  const trialActive = isSkinTrialActive();
+
+  const trialNotice = document.getElementById('skin-trial-notice');
+  if (trialNotice) trialNotice.style.display = trialActive ? '' : 'none';
 
   grid.innerHTML = SKIN_ORDER.map(key => {
     const cfg = CARD_SKINS[key];
     const singleMet = cfg.free || peakSingle >= (cfg.singleReq || 0);
     const multiMet = cfg.free || peakMulti >= (cfg.multiReq || 0);
-    const selectable = cfg.free || (singleMet && multiMet);
-    const lockHtml = selectable ? '' : '<span class="lock-badge">🔒</span>';
-    const statusHtml = cfg.free
-      ? `<div class="skin-status ok">${key === selected ? '사용 중' : '사용 가능'}</div>`
-      : `<div class="skin-status">
+    const trulyMet = cfg.free || (singleMet && multiMet);
+    const selectable = trulyMet || trialActive;
+    const lockHtml = trulyMet ? '' : (trialActive ? '<span class="lock-badge trial-badge">🎁</span>' : '<span class="lock-badge">🔒</span>');
+    let statusHtml;
+    if (cfg.free) {
+      statusHtml = `<div class="skin-status ok">${key === selected ? '사용 중' : '사용 가능'}</div>`;
+    } else if (!trulyMet && trialActive) {
+      statusHtml = `<div class="skin-status ok">체험 가능(오늘 자정까지)</div>`;
+    } else {
+      statusHtml = `<div class="skin-status">
           <span class="cond-line ${singleMet ? 'met' : 'unmet'}">${singleMet ? '✓' : ''} 싱글 ${cfg.singleReq.toLocaleString()}P${singleMet ? '' : ' 필요'}</span>
           <span class="cond-line ${multiMet ? 'met' : 'unmet'}">${multiMet ? '✓' : ''} 멀티 ₩${cfg.multiReq.toLocaleString()}${multiMet ? '' : ' 필요'}</span>
         </div>`;
+    }
     return `<div class="skin-item">
       <div class="skin-thumb${key === selected ? ' selected' : ''}" data-skin="${key}" style="${SKIN_THUMB_STYLE[key]}">${lockHtml}</div>
       <div class="skin-name">${cfg.label}</div>
@@ -443,7 +458,7 @@ function renderSkinGrid() {
       const cfg = CARD_SKINS[key];
       const peakSingle2 = me.peakSinglePoints ?? me.singlePoints ?? 0;
       const peakMulti2 = me.peakMultiBalance ?? me.multiBalance ?? 0;
-      const selectable = cfg.free || (peakSingle2 >= (cfg.singleReq || 0) && peakMulti2 >= (cfg.multiReq || 0));
+      const selectable = cfg.free || isSkinTrialActive() || (peakSingle2 >= (cfg.singleReq || 0) && peakMulti2 >= (cfg.multiReq || 0));
       const msg = document.getElementById('skin-msg');
       if (!selectable) {
         msg.style.color = '#e08f8f';

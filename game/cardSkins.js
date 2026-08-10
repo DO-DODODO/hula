@@ -7,13 +7,22 @@ const CARD_SKINS = {
   sea: { free: false, singleReq: 10000, multiReq: 1100000, label: '바다' },
   watermelon: { free: false, singleReq: 50000, multiReq: 1300000, label: '수박' },
   dolphin: { free: false, singleReq: 100000, multiReq: 1500000, label: '돌고래' },
+  peach: { free: false, singleReq: 150000, multiReq: 2000000, label: '복숭아' },
 };
+
+// 임시 전체 체험 이벤트 — 이 시각까지는 조건 미달이어도 모든 스킨을 선택/사용 가능.
+// 지나면 이 파일의 두 함수가 다시 조건을 그대로 체크하므로, 체험 중 조건 미달 스킨을
+// 골랐던 사용자는 별도 되돌리기 로직 없이 자동으로 기본색 폴백으로 돌아간다.
+const TRIAL_ALL_SKINS_END = new Date('2026-08-11T00:00:00+09:00').getTime();
+function isTrialActive() {
+  return Date.now() < TRIAL_ALL_SKINS_END;
+}
 
 // 이 스킨을 "메인 스킨"으로 선택 가능한지 — 무료거나, 싱글/멀티 조건을 둘 다 채워야 선택 가능
 function isSkinSelectable(skinKey, peakSinglePoints, peakMultiBalance) {
   const cfg = CARD_SKINS[skinKey];
   if (!cfg) return false;
-  if (cfg.free) return true;
+  if (cfg.free || isTrialActive()) return true;
   return peakSinglePoints >= cfg.singleReq && peakMultiBalance >= cfg.multiReq;
 }
 
@@ -24,8 +33,8 @@ function isSkinSelectable(skinKey, peakSinglePoints, peakMultiBalance) {
 function isSkinUsableInMode(skinKey, mode, peakSinglePoints, peakMultiBalance) {
   const cfg = CARD_SKINS[skinKey];
   if (!cfg) return false;
-  if (cfg.free) return true;
+  if (cfg.free || isTrialActive()) return true;
   return mode === 'multi' ? peakMultiBalance >= cfg.multiReq : peakSinglePoints >= cfg.singleReq;
 }
 
-module.exports = { CARD_SKINS, isSkinSelectable, isSkinUsableInMode };
+module.exports = { CARD_SKINS, isSkinSelectable, isSkinUsableInMode, isTrialActive, TRIAL_ALL_SKINS_END };

@@ -106,13 +106,17 @@ const CARD_SKINS = {
   sea: { free: false, singleReq: 10000, multiReq: 1100000 },
   watermelon: { free: false, singleReq: 50000, multiReq: 1300000 },
   dolphin: { free: false, singleReq: 100000, multiReq: 1500000 },
+  peach: { free: false, singleReq: 150000, multiReq: 2000000 },
 };
+// 오늘(2026-08-10) 자정까지 전체 카드 체험 이벤트 — game/cardSkins.js의
+// TRIAL_ALL_SKINS_END와 동일한 시각, 클라이언트는 표시용으로 중복 정의.
+const CARD_SKIN_TRIAL_END = new Date('2026-08-11T00:00:00+09:00').getTime();
 function applyCardSkin({ selectedCardSkin, peakSinglePoints, peakMultiBalance }) {
   const cfg = CARD_SKINS[selectedCardSkin];
-  const usable = cfg && (cfg.free ||
+  const usable = cfg && (cfg.free || Date.now() < CARD_SKIN_TRIAL_END ||
     (gameMode === 'multi' ? peakMultiBalance >= cfg.multiReq : peakSinglePoints >= cfg.singleReq));
   const effective = usable ? selectedCardSkin : 'basic';
-  document.body.classList.remove('skin-wine', 'skin-sea', 'skin-watermelon', 'skin-dolphin');
+  document.body.classList.remove('skin-wine', 'skin-sea', 'skin-watermelon', 'skin-dolphin', 'skin-peach');
   if (effective !== 'basic') document.body.classList.add('skin-' + effective);
 }
 

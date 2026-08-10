@@ -199,6 +199,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .skin-thumb { width: 100%; aspect-ratio: 5/7; border-radius: 8px; background-size: cover; background-position: center; border: 2px solid transparent; box-shadow: 0 3px 8px rgba(0,0,0,0.35); position: relative; cursor: pointer; }
 .skin-thumb.selected { border-color: var(--double); box-shadow: 0 0 0 2px rgba(255,210,74,0.3), 0 3px 10px rgba(0,0,0,0.4); }
 .skin-thumb .lock-badge { position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; font-size: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.skin-thumb .lock-badge.trial-badge { background: rgba(255,210,74,0.85); }
 .skin-name { font-size: 10.5px; font-weight: 800; color: #fff; }
 .skin-status { font-size: 8.5px; color: var(--text-dim); text-align: center; line-height: 1.4; }
 .skin-status.ok { color: #7fd88f; }
@@ -206,6 +207,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
 .skin-status .cond-line.met { color: #7fd88f; }
 .skin-status .cond-line.unmet { color: #e08f8f; }
 #skin-msg { font-size: 10.5px; color: var(--double); text-align: center; margin-top: 10px; min-height: 14px; }
+#skin-trial-notice { font-size: 10.5px; font-weight: 700; color: var(--double); text-align: center; margin-bottom: 10px; }
 
 /* ── 메인화면 카드 스킨 배너 ─────────────────────────────────────────── */
 .skin-banner {
@@ -214,7 +216,7 @@ input[type=text]::placeholder, input[type=password]::placeholder { color: #888; 
   border: 1px solid rgba(255,210,74,0.4);
   display: flex; align-items: center; gap: 10px; cursor: pointer;
 }
-.skin-banner .sb-thumb { width: 34px; height: 46px; border-radius: 5px; flex-shrink: 0; background-size: cover; background-position: center; box-shadow: 0 3px 8px rgba(0,0,0,0.4); background-image: url('../img/card-sea.png'); }
+.skin-banner .sb-thumb { width: 34px; height: 46px; border-radius: 5px; flex-shrink: 0; background-size: cover; background-position: center; box-shadow: 0 3px 8px rgba(0,0,0,0.4); background-image: url('../img/card-peach.png'); }
 .skin-banner .sb-text { flex: 1; }
 .skin-banner .sb-title { font-size: 12px; font-weight: 800; color: #fff; }
 .skin-banner .sb-sub { font-size: 10px; color: var(--double); margin-top: 2px; }
@@ -616,6 +618,7 @@ body.skin-wine .card.card-back { background: linear-gradient(135deg, #6b1a35 0%,
 body.skin-sea .card.card-back { background-image: url('../img/card-sea.png'); background-size: cover; background-position: center; border-color: #6ab6f2; }
 body.skin-watermelon .card.card-back { background-image: url('../img/card-watermelon.png'); background-size: cover; background-position: center; border-color: #7cb96f; }
 body.skin-dolphin .card.card-back { background-image: url('../img/card-dolphin.png'); background-size: cover; background-position: center; border-color: #b9d4ea; }
+body.skin-peach .card.card-back { background-image: url('../img/card-peach.png'); background-size: cover; background-position: center; border-color: #f0a888; }
 .card.small { width: clamp(32px, 3.5vw, 52px); height: clamp(46px, 5vw, 72px); font-size: clamp(9px, 1vw, 13px); }
 .card.tiny { width: clamp(24px, 2.5vw, 38px); height: clamp(34px, 3.5vw, 54px); font-size: clamp(8px, 0.8vw, 11px); }
 
