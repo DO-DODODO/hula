@@ -1895,7 +1895,7 @@ io.on('connection', (socket) => {
 
     for (const key of Object.keys(eventUtils.EVENT_CATEGORIES)) {
       const cfg = eventUtils.EVENT_CATEGORIES[key];
-      live[key] = { tiers: toPublicTiers(liveTiers[key]), minGames: cfg.minGames };
+      live[key] = { tiers: toPublicTiers(liveTiers[key]) };
       const r = lastWinners ? lastWinners[key] : { winners: [], value: 0 };
       results[key] = {
         ...toPublicWinner(r),
@@ -1910,6 +1910,7 @@ io.on('connection', (socket) => {
       currentStartSec: week.currentStartSec, currentLastDaySec: week.currentEndSec - 1,
       lastStartSec: week.lastStartSec, lastLastDaySec: week.lastEndSec - 1,
       resultsAvailable: week.resultsAvailable,
+      minSingleGames: eventUtils.EVENT_MIN_SINGLE_GAMES, minMultiGames: eventUtils.EVENT_MIN_MULTI_GAMES,
       live, results,
     });
   });

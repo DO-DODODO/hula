@@ -11,13 +11,23 @@ const EVENT_ANCHOR_DOW = 4; // 이벤트 주 시작 요일: 목요일 (0=일,1=�
 // 소급해서 "이미 우승/보상 확정"된 것처럼 보여주게 되어 사용자가 의도한 시작 시점과 어긋남.
 const EVENT_LAUNCH_WEEK_KEY = '2026-07-23';
 
+// 이벤트 전체 참여조건: 그 주에 싱글 20판 + 멀티 10판을 "둘 다" 채워야 어느 부문이든
+// (싱글/멀티/훌라 무관) 순위·보상 자격이 생긴다. 부문별 개별 최소판수는 두지 않음.
+const EVENT_MIN_SINGLE_GAMES = 20;
+const EVENT_MIN_MULTI_GAMES = 10;
+
 const EVENT_CATEGORIES = {
-  winsSingle: { mode: 'single', metric: 'wins', minGames: 3, pointAmount: 1000, moneyAmount: 0, label: '최다승 · 싱글' },
-  winsMulti: { mode: 'multi', metric: 'wins', minGames: 3, pointAmount: 0, moneyAmount: 50000, label: '최다승 · 멀티' },
-  gamesSingle: { mode: 'single', metric: 'games', minGames: 3, pointAmount: 500, moneyAmount: 0, label: '최다판 · 싱글' },
-  gamesMulti: { mode: 'multi', metric: 'games', minGames: 3, pointAmount: 0, moneyAmount: 25000, label: '최다판 · 멀티' },
-  hula: { mode: 'combined', metric: 'hula', minGames: 3, pointAmount: 1000, moneyAmount: 50000, label: '최다훌라 · 합산' },
+  winsSingle: { mode: 'single', metric: 'winRate', pointAmount: 1000, moneyAmount: 0, label: '최고승률 · 싱글' },
+  winsMulti: { mode: 'multi', metric: 'winRate', pointAmount: 0, moneyAmount: 50000, label: '최고승률 · 멀티' },
+  gamesSingle: { mode: 'single', metric: 'games', pointAmount: 500, moneyAmount: 0, label: '최다판 · 싱글' },
+  gamesMulti: { mode: 'multi', metric: 'games', pointAmount: 0, moneyAmount: 25000, label: '최다판 · 멀티' },
+  hula: { mode: 'combined', metric: 'hula', pointAmount: 1000, moneyAmount: 50000, label: '최다훌라 · 합산' },
 };
+
+// 이벤트 전체 참여조건 충족 여부 — 카테고리 무관하게 동일하게 적용되는 단일 게이트
+function isEligible(s) {
+  return s.singleGames >= EVENT_MIN_SINGLE_GAMES && s.multiGames >= EVENT_MIN_MULTI_GAMES;
+}
 
 // sec 시각의 KST 요일 (0=일요일 ~ 6=토요일), 서버 로컬 타임존과 무관하게 항상 KST 기준
 function kstDayOfWeek(sec) {
@@ -77,20 +87,28 @@ function aggregateUsersInRange(singleRows, multiRows, startSec, endSec) {
   return stats;
 }
 
+// 승률은 statsUtils.js의 "내 통계" 화면과 동일한 방식(소수 1자리 %)으로 계산해 일관성 유지.
+// isEligible을 통과한 s만 여기 들어오므로 singleGames>=20, multiGames>=10이 보장되어 0으로 나눌 일 없음.
 function valueFor(cfg, s) {
-  if (cfg.mode === 'single') return { games: s.singleGames, value: cfg.metric === 'wins' ? s.singleWins : s.singleGames };
-  if (cfg.mode === 'multi') return { games: s.multiGames, value: cfg.metric === 'wins' ? s.multiWins : s.multiGames };
-  return { games: s.singleGames + s.multiGames, value: s.hula };
+  if (cfg.mode === 'single') {
+    if (cfg.metric === 'winRate') return Math.floor((s.singleWins / s.singleGames) * 1000) / 10;
+    return cfg.metric === 'wins' ? s.singleWins : s.singleGames;
+  }
+  if (cfg.mode === 'multi') {
+    if (cfg.metric === 'winRate') return Math.floor((s.multiWins / s.multiGames) * 1000) / 10;
+    return cfg.metric === 'wins' ? s.multiWins : s.multiGames;
+  }
+  return s.hula;
 }
 
-// 한 부문의 이번(지난) 주 1위(공동 포함)를 계산. 최소판수 미달이거나 1위 값이 0이면 winners=[]("해당자 없음")
+// 한 부문의 이번(지난) 주 1위(공동 포함)를 계산. 참여조건 미달이거나 1위 값이 0이면 winners=[]("해당자 없음")
 function computeCategoryWinner(stats, categoryKey) {
   const cfg = EVENT_CATEGORIES[categoryKey];
   let bestValue = 0;
   let winners = [];
   for (const [userCode, s] of stats) {
-    const { games, value } = valueFor(cfg, s);
-    if (games < cfg.minGames) continue;
+    if (!isEligible(s)) continue;
+    const value = valueFor(cfg, s);
     if (value <= 0) continue;
     if (value > bestValue) { bestValue = value; winners = [userCode]; }
     else if (value === bestValue) { winners.push(userCode); }
@@ -114,8 +132,8 @@ function computeCategoryTiers(stats, categoryKey, topN = 3) {
   const cfg = EVENT_CATEGORIES[categoryKey];
   const byValue = new Map(); // value → [userCode, ...]
   for (const [userCode, s] of stats) {
-    const { games, value } = valueFor(cfg, s);
-    if (games < cfg.minGames) continue;
+    if (!isEligible(s)) continue;
+    const value = valueFor(cfg, s);
     if (value <= 0) continue;
     if (!byValue.has(value)) byValue.set(value, []);
     byValue.get(value).push(userCode);
@@ -136,6 +154,7 @@ function computeAllCategoryTiers(stats, topN = 3) {
 
 module.exports = {
   EVENT_ANCHOR_DOW, EVENT_CATEGORIES, EVENT_LAUNCH_WEEK_KEY,
+  EVENT_MIN_SINGLE_GAMES, EVENT_MIN_MULTI_GAMES, isEligible,
   getWeekStartSec, getCurrentAndLastWeek,
   aggregateUsersInRange, computeCategoryWinner, computeAllCategoryWinners,
   computeCategoryTiers, computeAllCategoryTiers,

@@ -990,8 +990,8 @@ function renderMyStats() {
 // ── 주간 이벤트 ────────────────────────────────────────────────────────
 const EVENT_CATEGORY_ORDER = ['winsSingle', 'winsMulti', 'gamesSingle', 'gamesMulti', 'hula'];
 const EVENT_CATEGORY_META = {
-  winsSingle: { label: '최다승 · 싱글', unit: '승', icon: '🎁' },
-  winsMulti: { label: '최다승 · 멀티', unit: '승', icon: '🎁' },
+  winsSingle: { label: '최고승률 · 싱글', unit: '%', icon: '🎁' },
+  winsMulti: { label: '최고승률 · 멀티', unit: '%', icon: '🎁' },
   gamesSingle: { label: '최다판 · 싱글', unit: '판', icon: '🎁' },
   gamesMulti: { label: '최다판 · 멀티', unit: '판', icon: '🎁' },
   hula: { label: '최다훌라 · 합산', unit: '회', icon: '✨' },
