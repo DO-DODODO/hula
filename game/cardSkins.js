@@ -4,9 +4,9 @@
 const CARD_SKINS = {
   basic: { free: true, label: '기본색' },
   wine: { free: true, label: '와인색' },
-  sea: { free: false, singleReq: 10000, multiReq: 1100000, label: '바다' },
+  sea: { free: false, singleReq: 10000, multiReq: 1100000, label: '파라솔' },
   watermelon: { free: false, singleReq: 50000, multiReq: 1300000, label: '수박' },
-  dolphin: { free: false, singleReq: 100000, multiReq: 1500000, label: '돌고래' },
+  dolphin: { free: false, singleReq: 100000, multiReq: 1500000, label: '돼지' },
   peach: { free: false, singleReq: 150000, multiReq: 2000000, label: '복숭아' },
 };
 

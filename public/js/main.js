@@ -401,18 +401,18 @@ function renderAvatarGrid(currentAvatar) {
 const CARD_SKINS = {
   basic: { free: true, label: '기본색' },
   wine: { free: true, label: '와인색' },
-  sea: { free: false, singleReq: 10000, multiReq: 1100000, label: '바다' },
+  sea: { free: false, singleReq: 10000, multiReq: 1100000, label: '파라솔' },
   watermelon: { free: false, singleReq: 50000, multiReq: 1300000, label: '수박' },
-  dolphin: { free: false, singleReq: 100000, multiReq: 1500000, label: '돌고래' },
+  dolphin: { free: false, singleReq: 100000, multiReq: 1500000, label: '돼지' },
   peach: { free: false, singleReq: 150000, multiReq: 2000000, label: '복숭아' },
 };
 const SKIN_ORDER = ['basic', 'wine', 'sea', 'watermelon', 'dolphin', 'peach'];
 const SKIN_THUMB_STYLE = {
   basic: 'background: linear-gradient(135deg, #1a3a6b 0%, #2d5fa6 100%);',
   wine: 'background: linear-gradient(135deg, #6b1a35 0%, #a62d5f 100%);',
-  sea: "background-image:url('img/card-sea.png');background-size:cover;background-position:center;",
+  sea: "background-image:url('img/card-parasol.png');background-size:cover;background-position:center;",
   watermelon: "background-image:url('img/card-watermelon.png');background-size:cover;background-position:center;",
-  dolphin: "background-image:url('img/card-dolphin.png');background-size:cover;background-position:center;",
+  dolphin: "background-image:url('img/card-pig.png');background-size:cover;background-position:center;",
   peach: "background-image:url('img/card-peach.png');background-size:cover;background-position:center;",
 };
 
